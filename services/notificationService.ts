@@ -43,7 +43,7 @@ export async function registrarParaPushNotificationsAsync() {
 
     // OBTENER TOKEN
     // El projectId se saca automáticamente de app.json (extra.eas.projectId)
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.manifest?.extra?.eas?.projectId;
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? (Constants?.manifest as any)?.extra?.eas?.projectId;
     
     try {
         const pushTokenData = await Notifications.getExpoPushTokenAsync({
