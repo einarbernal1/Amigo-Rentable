@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "101263983206",
+    "project_id": "amigo-rentable-1961e",
+    "storage_bucket": "amigo-rentable-1961e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:101263983206:android:3259fee703ee5d644f63a7",
+        "android_client_info": {
+          "package_name": "com.leo.amigorentable"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjQAGbXFO9dyiOA5g_CqjTiqReC5CcbH8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
