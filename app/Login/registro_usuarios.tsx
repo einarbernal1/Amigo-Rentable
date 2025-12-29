@@ -209,6 +209,20 @@ export default function RegisterScreen() {
       mostrarModal('Error', 'Debes subir una fotografía de perfil.', 'error');
       return false;
     }
+    const hoy = new Date();
+    // fechaNacimiento ya es un objeto Date gracias a tu estado
+    let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
+    const diferenciaMeses = hoy.getMonth() - fechaNacimiento.getMonth();
+
+    // Ajustamos la edad si aún no ha cumplido años este mes/día
+    if (diferenciaMeses < 0 || (diferenciaMeses === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
+      edad--;
+    }
+
+    if (edad < 18) {
+      mostrarModal('Restricción de Edad', 'Lo sentimos, debes tener al menos 18 años para registrarte en Amigo Rentable.', 'error');
+      return false;
+    }
 
     // --- VALIDACIONES DE HORARIO ---
     if (tipoUsuario === 'alqui-amigo') {
@@ -500,12 +514,14 @@ export default function RegisterScreen() {
               selectedValue={genero}
               onValueChange={setGenero}
               enabled={!cargando}
-              style={styles.picker}
+              style={[styles.picker, { color: '#000000' }]} // Texto negro
+              dropdownIconColor="#000000" // Flecha negra
+              mode="dropdown"
             >
-              <Picker.Item label="Género" value="" />
-              <Picker.Item label="Masculino" value="masculino" />
-              <Picker.Item label="Femenino" value="femenino" />
-              <Picker.Item label="Otro" value="otro" />
+              <Picker.Item label="Género" value="" color="#888888" />
+              <Picker.Item label="Masculino" value="masculino" color="#000000" />
+              <Picker.Item label="Femenino" value="femenino" color="#000000" />
+              <Picker.Item label="Otro" value="otro" color="#000000" />
             </Picker>
           </View>
           <TextInput
@@ -766,7 +782,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingTop: 40,
-    paddingBottom: 20,
+    paddingBottom:70,
     alignItems: 'center',
   },
   logo: {

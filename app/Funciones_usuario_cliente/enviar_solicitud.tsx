@@ -272,11 +272,12 @@ export default function EnviarSolicitudScreen() {
           />
         )}
 
-        <Text style={styles.labelInput}>Duración (horas)</Text>
+      <Text style={styles.labelInput}>Duración (horas)</Text>
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
             placeholder="Ej: 2"
+            placeholderTextColor="#888888" // <--- AGREGADO
             keyboardType="numeric"
             value={duracion}
             onChangeText={setDuracion}
@@ -288,6 +289,7 @@ export default function EnviarSolicitudScreen() {
           <TextInput
             style={styles.input}
             placeholder="Ej: Cine Center, Plaza Principal..."
+            placeholderTextColor="#888888"
             value={ubicacion}
             onChangeText={setUbicacion}
           />
@@ -298,6 +300,7 @@ export default function EnviarSolicitudScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Describe brevemente los detalles o propósito de la solicitud..."
+            placeholderTextColor="#888888"
             multiline
             numberOfLines={4}
             textAlignVertical="top"
