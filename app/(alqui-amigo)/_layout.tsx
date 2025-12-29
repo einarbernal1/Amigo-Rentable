@@ -13,7 +13,7 @@ export default function AlquiAmigoLayout() {
           backgroundColor: '#F5F5F5',
           borderTopWidth: 1,
           borderTopColor: '#E0E0E0',
-          height: 98,
+          height: 110,
           paddingBottom: 10,
           paddingTop: 10,
         },

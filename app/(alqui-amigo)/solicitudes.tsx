@@ -15,6 +15,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase';
+import { enviarNotificacionPush } from '../../services/notificationService';
+
 
 interface SolicitudEntrante {
   id: string;
@@ -28,6 +30,7 @@ interface SolicitudEntrante {
   duracion: number;
   estado: 'pendiente' | 'aceptada' | 'rechazada' | 'concluida';
   datosCompletos: any;
+  clientePushToken?: string;
 }
 
 export default function SolicitudesAlquiAmigoScreen() {
@@ -78,13 +81,22 @@ export default function SolicitudesAlquiAmigoScreen() {
           const data = document.data();
           
           // Datos por defecto si falla la carga del cliente
-          let clienteInfo = {
+          let clienteInfo: {
+            nombres: string;
+            fotoURL: string;
+            telefono: string;
+            email: string;
+            genero: string;
+            fechaNacimiento: string;
+            pushToken: string | null;
+          } = {
             nombres: 'Usuario Desconocido',
             fotoURL: '',
             telefono: '',
             email: 'No disponible',
             genero: 'No especificado',
-            fechaNacimiento: ''
+            fechaNacimiento: '',
+            pushToken: null
           };
 
           try {
@@ -97,7 +109,8 @@ export default function SolicitudesAlquiAmigoScreen() {
                 telefono: cData.telefono || '',
                 email: cData.email || 'No disponible',
                 genero: cData.genero || 'No especificado',
-                fechaNacimiento: cData.fechaNacimiento || ''
+                fechaNacimiento: cData.fechaNacimiento || '',
+                pushToken: null as string | null // <--- ¡AQUÍ ES DONDE DEBE IR!
               };
             }
           } catch (e) {
@@ -112,6 +125,7 @@ export default function SolicitudesAlquiAmigoScreen() {
             nombreCliente: clienteInfo.nombres,
             fotoCliente: clienteInfo.fotoURL,
             telefonoCliente: clienteInfo.telefono,
+            clientePushToken: (clienteInfo as any).pushToken,
             lugar: data.lugar_asistir,
             fecha: data.fecha_salida,
             hora: data.hora_salida,
@@ -151,16 +165,63 @@ export default function SolicitudesAlquiAmigoScreen() {
   };
 
   const cambiarEstado = async (id: string, nuevoEstado: 'aceptada' | 'rechazada') => {
+    // 1. Actualizar visualmente primero (Optimistic UI) para que se sienta rápido
     setSolicitudes(prev => {
       const act = prev.map(s => s.id === id ? { ...s, estado: nuevoEstado } : s);
       return ordenarSolicitudes(act);
     });
 
     try {
+      // 2. Actualizar el estado en Firebase (Solicitud)
       await updateDoc(doc(db, 'solicitudes', id), { estado_solicitud: nuevoEstado });
+
+      // --- CAMBIO CLAVE: BUSCAR TOKEN FRESCO ---
+      // Buscamos la solicitud en memoria solo para obtener el ID del cliente
+      const solicitudEnMemoria = solicitudes.find(s => s.id === id);
+      
+      if (solicitudEnMemoria) {
+        // Vamos directamente a la colección 'clientes' a buscar su token REAL
+        const clienteRef = doc(db, 'clientes', solicitudEnMemoria.cliente_id);
+        const clienteSnap = await getDoc(clienteRef);
+
+        if (clienteSnap.exists()) {
+          const datosCliente = clienteSnap.data();
+          const tokenDestino = datosCliente?.pushToken; // Leemos el campo exacto de tu BD
+
+          console.log("Token fresco obtenido de BD:", tokenDestino);
+
+          if (tokenDestino) {
+            let titulo = '';
+            let cuerpo = '';
+
+            if (nuevoEstado === 'aceptada') {
+              titulo = '¡Solicitud Aceptada! 🎉';
+              cuerpo = `El AlquiAmigo ha aceptado tu solicitud. Prepara tu salida.`;
+            } else {
+              titulo = 'Solicitud Rechazada';
+              cuerpo = `El AlquiAmigo no puede aceptar tu solicitud en este momento.`;
+            }
+
+            // Enviamos la notificación
+            await enviarNotificacionPush(
+              tokenDestino,
+              titulo,
+              cuerpo,
+              { solicitudId: id, tipo: 'cambio_estado' }
+            );
+            console.log("✅ Notificación enviada exitosamente");
+          } else {
+            console.warn("⚠️ El documento del cliente existe, pero el campo 'pushToken' está vacío.");
+          }
+        } else {
+          console.error("❌ No se encontró el documento del cliente en Firebase.");
+        }
+      }
+
     } catch (error) {
-      Alert.alert("Error", "No se pudo actualizar.");
-      cargarSolicitudesEntrantes();
+      Alert.alert("Error", "No se pudo actualizar la solicitud.");
+      console.error("Error en cambiarEstado:", error);
+      cargarSolicitudesEntrantes(); // Revertir cambios visuales si falla
     }
   };
 
