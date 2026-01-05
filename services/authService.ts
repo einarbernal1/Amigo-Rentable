@@ -99,7 +99,7 @@ export const registerUser = async (data: RegisterData) => {
     // 2. Subir imagen (Si el usuario seleccionó una)
     let fotoURLPublica = '';
     if (data.fotoURL) {
-      // Llamamos a nuestra nueva función
+    
       fotoURLPublica = await subirImagenPerfil(data.fotoURL, user.uid);
     }
 
@@ -115,9 +115,9 @@ export const registerUser = async (data: RegisterData) => {
       telefono: data.telefono,
       intereses: data.intereses || '',
       descripcion: data.descripcion || '',
-      fotoURL: fotoURLPublica, // <--- GUARDAMOS LA URL DE LA NUBE, NO LA LOCAL
+      fotoURL: fotoURLPublica,
       createdAt: Timestamp.now(),
-      activo: false, // Por defecto inactivo hasta que el admin acepte
+      activo: false, 
       estadoCuenta: 'pendiente',
     };
 
@@ -141,8 +141,7 @@ export const registerUser = async (data: RegisterData) => {
 
   } catch (error: any) {
     console.error('Error registro:', error);
-    // Nota: Si falla el registro, idealmente deberíamos borrar el usuario creado en Auth,
-    // pero para este MVP lo dejaremos así.
+
     return { success: false, error: error.message };
   }
 };
