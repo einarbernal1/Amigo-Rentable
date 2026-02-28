@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#D50000', // Rojo para alerta de salida
+    backgroundColor: '#D50000',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,

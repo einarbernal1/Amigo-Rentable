@@ -15,7 +15,7 @@ import { useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { obtenerDenunciasPendientes, resolverDenuncia } from '../../services/adminService';
 
-// --- MODAL DE CONFIRMACIÓN MEJORADO ---
+//MODAL DE CONFIRMACIÓN
 const ConfirmActionModal = ({ visible, tipo, esCritico, nombre, onConfirm, onCancel, procesando }: any) => {
   // Lógica visual: Si es Ban O es un Strike Crítico (el 3ro), usamos ROJO.
   const esPeligroso = tipo === 'ban' || esCritico;
@@ -74,7 +74,7 @@ const ConfirmActionModal = ({ visible, tipo, esCritico, nombre, onConfirm, onCan
   );
 };
 
-// --- MODAL DE ÉXITO SIMPLE (Para reemplazar Alert) ---
+// --- MODAL DE ÉXITO SIMPLE
 const SuccessModal = ({ visible, mensaje, onClose }: any) => (
   <Modal transparent visible={visible} animationType="fade">
     <View style={styles.modalOverlay}>

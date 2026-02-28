@@ -30,12 +30,12 @@ export default function DetalleUsuarioScreen() {
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
 
-// EFECTO PARA CARGAR DATOS FRESCOS (Y ARREGLAR LA URL DE LA FOTO)
+// EFECTO PARA CARGAR DATOS FRESCOS
 useEffect(() => {
   const cargarDatosUsuario = async () => {
     if (uid && userType) {
       try {
-        // Reutilizamos tu servicio de authService
+        // Reutilizamos el servicio de authService
         const data = await getUserData(uid as string, userType as any);
         setUsuario(data);
       } catch (error) {
@@ -48,7 +48,7 @@ useEffect(() => {
   cargarDatosUsuario();
 }, [uid, userType]);
 
-// Renderizado de carga
+// Renderizado para cuando esta cargando el apartado
 if (cargando) {
   return (
     <View style={styles.center}>
@@ -75,12 +75,10 @@ if (!usuario) {
   const renderHorarios = () => {
     if (!usuario.disponibilidadHoraria) return "No especificado";
     
-    // Filtramos los días activos y formateamos
     const diasActivos = ORDEN_DIAS.filter(dia => {
         // Verificamos si existe el día y si tiene la propiedad activo (o si el objeto existe se asume activo según tu estructura anterior)
         const diaData = usuario.disponibilidadHoraria[dia];
-        // En tu estructura de registro, el objeto del día se guarda si está activo, o puede tener la flag activo.
-        // Asumiendo que si está en la BD es porque se guardó. Revisamos si no es null.
+
         return diaData && (diaData.activo !== false);
       })
       .map(dia => {
@@ -109,7 +107,7 @@ if (!usuario) {
 
       <ScrollView contentContainerStyle={styles.content}>
         
-        {/* FOTO DE PERFIL (Expandible) */}
+        {/* FOTO DE PERFIL*/}
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={() => setModalVisible(true)}>
             <View style={styles.avatarContainer}>
@@ -174,7 +172,7 @@ if (!usuario) {
           </>
         )}
 
-        {/* DESCRIPCIÓN PERSONAL (Para ambos) */}
+        {/* DESCRIPCIÓN PERSONAL*/}
         <Text style={styles.sectionLabel}>Descripción Personal</Text>
         <View style={styles.valueBoxMulti}>
           <Text style={styles.valueText}>
@@ -182,7 +180,7 @@ if (!usuario) {
           </Text>
         </View>
 
-        {/* DISPONIBILIDAD (Solo Alqui-Amigo) */}
+        {/* DISPONIBILIDAD DEL ALQUI-AMIGO */}
         {usuario.userType === 'alqui-amigo' && (
           <>
             <Text style={styles.sectionLabel}>Disponibilidad</Text>
@@ -197,7 +195,7 @@ if (!usuario) {
 
       </ScrollView>
 
-      {/* MODAL FOTO FULL SCREEN */}
+      {/* MODAL PARA VER LA FOTO EN AMPLIO */}
       <Modal visible={modalVisible} transparent={true} animationType="fade">
         <View style={styles.modalBackground}>
           <TouchableOpacity style={styles.closeModal} onPress={() => setModalVisible(false)}>
@@ -248,7 +246,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 15,
-    width: '63%', // Resto del espacio
+    width: '63%',
   },
   valueBoxMulti: {
     backgroundColor: '#F0F0F0',

@@ -15,7 +15,6 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { obtenerSolicitudesRegistro, gestionarUsuario, obtenerResumen } from '../../services/adminService';
-// Importamos el servicio corregido
 import { enviarCorreoAutomatico } from '../../services/emailService';
 
 // --- MODAL DE CONFIRMACIÓN ---
@@ -111,7 +110,7 @@ export default function AdminSolicitudesScreen() {
     const resultado = await gestionarUsuario(usuarioSeleccionado.id, usuarioSeleccionado.coleccion, accionModal);
     
     if (resultado.success) {
-      // 2. Enviar Correo Automático (Silencioso)
+      // 2. Enviar Correo Automático
       // No bloqueamos si falla el correo, lo importante es que la base de datos se actualizó
       enviarCorreoAutomatico(
         usuarioSeleccionado.email, 
@@ -138,7 +137,6 @@ export default function AdminSolicitudesScreen() {
   };
 
   const irADetalleExtra = (usuario: any) => {
-    // CAMBIO: En lugar de pasar todo el objeto stringify, pasamos IDs
     router.push({
       pathname: '/(admin)/detalle_usuario',
       params: { 
