@@ -50,19 +50,19 @@ export default function DetalleSolicitudScreen() {
           };
 
           if (solData.cliente_id) {
-            const clientRef = doc(db, 'clientes', solData.cliente_id);
-            const clientSnap = await getDoc(clientRef);
+            const usuarioRef = doc(db, 'usuarios', solData.cliente_id);
+            const usuarioSnap = await getDoc(usuarioRef);
             
-            if (clientSnap.exists()) {
-              const cData = clientSnap.data();
-              // Mapeamos los datos del cliente
+            if (usuarioSnap.exists()) {
+              const uData = usuarioSnap.data();
+              // Mapeamos los datos del usuario
               clienteInfo = {
-                nombreCliente: cData.nombres || 'Usuario',
-                fotoCliente: cData.fotoURL || '', // <--- ¡AQUÍ LLEGA LA URL CORRECTA!
-                email: cData.email || 'No disponible',
-                telefonoCliente: cData.telefono || '',
-                genero: cData.genero || 'No esp.',
-                fechaNacimiento: cData.fechaNacimiento || ''
+                nombreCliente: uData.nombres || 'Usuario',
+                fotoCliente: uData.fotografia || '',
+                email: uData.correo || 'No disponible',
+                telefonoCliente: uData.nro_telefonico || '',
+                genero: uData.genero || 'No esp.',
+                fechaNacimiento: uData.fecha_nacimiento || ''
               };
             }
           }

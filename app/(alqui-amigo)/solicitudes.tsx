@@ -186,19 +186,31 @@ export default function SolicitudesAlquiAmigoScreen() {
     try {
       const user = auth.currentUser;
       if (!user) return;
-      const q = query(collection(db, 'solicitudes'), where('alqui_amigo_id', '==', user.uid));
-      const querySnapshot = await getDocs(q);
+
+      // Buscar solicitudes donde amigo_id o alqui_amigo_id coincida
+      const q1 = query(collection(db, 'solicitudes'), where('amigo_id', '==', user.uid));
+      const q2 = query(collection(db, 'solicitudes'), where('alqui_amigo_id', '==', user.uid));
+      
+      const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      
+      // Combinar resultados sin duplicados
+      const docsMap = new Map();
+      snap1.docs.forEach(d => docsMap.set(d.id, d));
+      snap2.docs.forEach(d => docsMap.set(d.id, d));
+      const allDocs = Array.from(docsMap.values());
+
       const lista: SolicitudEntrante[] = [];
 
       await Promise.all(
-        querySnapshot.docs.map(async (document) => {
+        allDocs.map(async (document: any) => {
           const data = document.data();
           let clienteInfo: any = { nombres: 'Usuario Desconocido', fotoURL: '', telefono: '', email: 'No disponible', genero: 'No especificado', fechaNacimiento: '', pushToken: null };
           try {
-            const clienteDoc = await getDoc(doc(db, 'clientes', data.cliente_id));
-            if (clienteDoc.exists()) {
-              const cData = clienteDoc.data();
-              clienteInfo = { nombres: cData.nombres || 'Usuario', fotoURL: cData.fotoURL || '', telefono: cData.telefono || '', email: cData.email || 'No disponible', genero: cData.genero || 'No especificado', fechaNacimiento: cData.fechaNacimiento || '', pushToken: cData.pushToken || null };
+            // Obtener datos del cliente desde 'usuarios'
+            const usuarioDoc = await getDoc(doc(db, 'usuarios', data.cliente_id));
+            if (usuarioDoc.exists()) {
+              const uData = usuarioDoc.data();
+              clienteInfo = { nombres: uData.nombres || 'Usuario', fotoURL: uData.fotografia || '', telefono: uData.nro_telefonico || '', email: uData.correo || 'No disponible', genero: uData.genero || 'No especificado', fechaNacimiento: uData.fecha_nacimiento || '', pushToken: uData.pushToken || null };
             }
           } catch (e) { console.error(e); }
 

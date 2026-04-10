@@ -22,18 +22,16 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 
   
   // --- INTERFAZ PARA EL HORARIO ---
-  // Define la estructura para un rango horario
   export interface Horario {
-    inicio: string; // Ej: "09:00"
-    fin: string;    // Ej: "17:00"
+    inicio: string;
+    fin: string;
     inicioPeriodo: 'am' | 'pm';
     finPeriodo: 'am' | 'pm';
   }
   
-  // Define los días que pueden tener un horario
   type DiasDisponibles = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo';
   
-  // --- INTERFAZ DE REGISTRO ACTUALIZADA ---
+  // --- INTERFAZ DE REGISTRO ---
   export interface RegisterData {
     email: string;
     password: string;
@@ -64,22 +62,14 @@ import { sendPasswordResetEmail } from 'firebase/auth';
   }
   
 
-// --- NUEVA FUNCIÓN PARA SUBIR IMAGEN ---
+// --- FUNCIÓN PARA SUBIR IMAGEN ---
 const subirImagenPerfil = async (uri: string, uid: string) => {
   try {
-    // 1. Convertir la ruta local a un Blob (archivo binario)
     const response = await fetch(uri);
     const blob = await response.blob();
-
-    // 2. Crear referencia en Storage: carpeta 'perfiles', nombre = uid del usuario
     const storageRef = ref(storage, `perfiles/${uid}`);
-
-    // 3. Subir el archivo
     await uploadBytes(storageRef, blob);
-
-    // 4. Obtener la URL pública (https://...)
     const downloadURL = await getDownloadURL(storageRef);
-    
     return downloadURL;
   } catch (error) {
     console.error("Error subiendo imagen:", error);
@@ -89,6 +79,7 @@ const subirImagenPerfil = async (uri: string, uid: string) => {
 
 /**
  * Registra un nuevo usuario en Firebase Authentication, Storage y Firestore
+ * Crea documento en 'usuarios' + documento en 'clientes' o 'amigos' según tipo
  */
 export const registerUser = async (data: RegisterData) => {
   try {
@@ -103,72 +94,77 @@ export const registerUser = async (data: RegisterData) => {
     // 2. Subir imagen (Si el usuario seleccionó una)
     let fotoURLPublica = '';
     if (data.fotoURL) {
-    
       fotoURLPublica = await subirImagenPerfil(data.fotoURL, user.uid);
     }
 
-    // 3. Preparar datos para Firestore
-    const userData: any = {
-      uid: user.uid,
-      email: data.email,
-      userType: data.userType,
+    // 3. Crear documento en colección 'usuarios' (datos base)
+    const usuarioData: any = {
+      usuario_id: user.uid,
       nombres: data.nombres,
-      cedula: data.cedula,
-      fechaNacimiento: data.fechaNacimiento,
+      apellidos: '',
+      tipo_usuario: data.userType,
+      fecha_nacimiento: data.fechaNacimiento,
+      cedula_identidad: data.cedula,
       genero: data.genero,
-      telefono: data.telefono,
-      intereses: data.intereses || '',
+      correo: data.email,
+      contraseña: '', // No guardamos contraseña en Firestore (Firebase Auth la maneja)
+      fotografia: fotoURLPublica,
+      nro_telefonico: data.telefono,
       descripcion: data.descripcion || '',
-      fotoURL: fotoURLPublica,
-      createdAt: Timestamp.now(),
-      activo: false, 
+      intereses: data.intereses || '',
+      activo: false,
+      // Campos adicionales de la app (no en el modelo pero necesarios para flujo)
       estadoCuenta: 'pendiente',
+      pushToken: '',
+      createdAt: Timestamp.now(),
     };
 
-    if (data.userType === 'alqui-amigo') {
-      userData.tarifa = data.tarifa || '0';
-      userData.disponibilidadHoraria = data.disponibilidadHoraria || {};
-      userData.rating = 0;
-      userData.totalReservas = 0;
-      userData.cantidadCalificaciones = 0;
-      userData.sumaCalificaciones = 0;
-    } else {
-      userData.reservasRealizadas = 0;
-    }
+    await setDoc(doc(db, 'usuarios', user.uid), usuarioData);
 
-    const collectionName = data.userType === 'cliente' ? 'clientes' : 'alqui-amigos';
-    
-    // 4. Guardar en Firestore
-    await setDoc(doc(db, collectionName, user.uid), userData);
+    // 4. Crear documento en colección de rol específico
+    if (data.userType === 'cliente') {
+      await setDoc(doc(db, 'clientes', user.uid), {
+        cliente_id: user.uid,
+        usuario_id: user.uid,
+      });
+    } else {
+      // alqui-amigo → colección 'amigos'
+      await setDoc(doc(db, 'amigos', user.uid), {
+        amigo_id: user.uid,
+        tarifa_hora: data.tarifa || '0',
+        horarios_trabajo: data.disponibilidadHoraria || {},
+        calificacion: 0,
+        nro_faltas: 0,
+        usuario_id: user.uid,
+        // Campos adicionales para cálculos de rating
+        cantidadCalificaciones: 0,
+        sumaCalificaciones: 0,
+        totalReservas: 0,
+      });
+    }
 
     return { success: true, userId: user.uid };
 
   } catch (error: any) {
     console.error('Error registro:', error);
-
     return { success: false, error: error.message };
   }
 };
   
   /**
    * Inicia sesión con email y contraseña
+   * Ahora busca en colección 'usuarios' unificada
    */
   export const loginUser = async (email: string, password: string, userType: 'cliente' | 'alqui-amigo') => {
     try {
       // 1. LÓGICA DE ADMIN REAL
       if (email.toLowerCase() === 'admin1236@gmail.com' && password === '111') {
         try {
-          // Intentamos loguear al admin en Firebase REALMENTE
           await signInWithEmailAndPassword(auth, email, "AdminPasswordSeguro123"); 
-          // Nota: Como la contraseña '111' es muy corta para Firebase (min 6 caracteres),
-          // usamos una contraseña interna segura o intentamos crear la cuenta.
         } catch (e: any) {
           if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-              // Si el admin no existe en Firebase, lo creamos automáticamente la primera vez
-              // Usamos una contraseña más fuerte internamente
               await createUserWithEmailAndPassword(auth, email, "AdminPasswordSeguro123");
           } else {
-              // Si falla por contraseña incorrecta (porque ya existe), intentamos loguear con la password real si el usuario puso '111'
                await signInWithEmailAndPassword(auth, email, "AdminPasswordSeguro123");
           }
         }
@@ -180,15 +176,21 @@ export const registerUser = async (data: RegisterData) => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
   
-      const collectionName = userType === 'cliente' ? 'clientes' : 'alqui-amigos';
-      const userDoc = await getDoc(doc(db, collectionName, user.uid));
+      // Buscar en colección unificada 'usuarios'
+      const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
   
       if (!userDoc.exists()) {
         await signOut(auth);
-        return { success: false, error: `No existe cuenta de ${userType}.` };
+        return { success: false, error: `No existe cuenta registrada.` };
       }
   
       const userData = userDoc.data();
+
+      // Verificar que el tipo de usuario coincide
+      if (userData.tipo_usuario !== userType) {
+        await signOut(auth);
+        return { success: false, error: `No existe cuenta de ${userType}.` };
+      }
   
       if (userData.estadoCuenta === 'pendiente' || userData.activo === false) {
         await signOut(auth);
@@ -206,7 +208,7 @@ export const registerUser = async (data: RegisterData) => {
         };
       }
   
-      return { success: true, role: userData.userType, userId: user.uid };
+      return { success: true, role: userData.tipo_usuario, userId: user.uid };
   
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -225,17 +227,62 @@ export const registerUser = async (data: RegisterData) => {
   };
   
   /**
-   * Obtiene los datos del usuario actual desde Firestore
+   * Obtiene los datos del usuario desde Firestore
+   * Combina datos de 'usuarios' + datos de rol ('clientes' o 'amigos')
+   * Retorna un objeto unificado para compatibilidad con las pantallas
    */
   export const getUserData = async (userId: string, userType: 'cliente' | 'alqui-amigo') => {
     try {
-      const collectionName = userType === 'cliente' ? 'clientes' : 'alqui-amigos';
-      const userDoc = await getDoc(doc(db, collectionName, userId));
+      // 1. Obtener datos base de 'usuarios'
+      const userDoc = await getDoc(doc(db, 'usuarios', userId));
       
-      if (userDoc.exists()) {
-        return userDoc.data();
+      if (!userDoc.exists()) {
+        return null;
       }
-      return null;
+
+      const baseData = userDoc.data();
+
+      // Mapear campos del nuevo modelo al formato esperado por las pantallas
+      const mappedData: any = {
+        uid: userId,
+        email: baseData.correo,
+        userType: baseData.tipo_usuario,
+        nombres: baseData.nombres,
+        cedula: baseData.cedula_identidad,
+        fechaNacimiento: baseData.fecha_nacimiento,
+        genero: baseData.genero,
+        telefono: baseData.nro_telefonico,
+        intereses: baseData.intereses || '',
+        descripcion: baseData.descripcion || '',
+        fotoURL: baseData.fotografia || '',
+        activo: baseData.activo,
+        estadoCuenta: baseData.estadoCuenta,
+        pushToken: baseData.pushToken || '',
+        createdAt: baseData.createdAt,
+      };
+
+      // 2. Obtener datos específicos del rol
+      if (userType === 'alqui-amigo') {
+        const amigoDoc = await getDoc(doc(db, 'amigos', userId));
+        if (amigoDoc.exists()) {
+          const amigoData = amigoDoc.data();
+          mappedData.tarifa = amigoData.tarifa_hora || '0';
+          mappedData.disponibilidadHoraria = amigoData.horarios_trabajo || {};
+          mappedData.rating = amigoData.calificacion || 0;
+          mappedData.faltas = amigoData.nro_faltas || 0;
+          mappedData.cantidadCalificaciones = amigoData.cantidadCalificaciones || 0;
+          mappedData.sumaCalificaciones = amigoData.sumaCalificaciones || 0;
+          mappedData.totalReservas = amigoData.totalReservas || 0;
+        }
+      } else {
+        const clienteDoc = await getDoc(doc(db, 'clientes', userId));
+        if (clienteDoc.exists()) {
+          const clienteData = clienteDoc.data();
+          mappedData.reservasRealizadas = clienteData.reservasRealizadas || 0;
+        }
+      }
+
+      return mappedData;
     } catch (error) {
       console.error('Error al obtener datos del usuario:', error);
       throw error;
@@ -249,18 +296,15 @@ export const registerUser = async (data: RegisterData) => {
     return auth.currentUser;
   };
 
-  // --- AGREGAR ESTA NUEVA FUNCIÓN AL FINAL ---
+  // Guardar token de notificación push en colección 'usuarios'
 export const guardarTokenNotificacion = async (userId: string, userType: 'cliente' | 'alqui-amigo' | 'admin', token: string) => {
   try {
-    // Si es admin, quizás no quieras guardar token, o sí. Asumo que alqui-amigo es lo importante.
-    const collectionName = userType === 'cliente' ? 'clientes' : 'alqui-amigos';
-    
-    // Si es admin, no hacemos nada o lo guardas en otra colección
     if(userType === 'admin') return;
 
-    const userRef = doc(db, collectionName, userId);
+    // Guardar en colección 'usuarios' (unificada)
+    const userRef = doc(db, 'usuarios', userId);
     await updateDoc(userRef, {
-      pushToken: token // <--- Campo nuevo en tu BD
+      pushToken: token
     });
   } catch (error) {
     console.error("Error guardando token push:", error);
@@ -268,15 +312,18 @@ export const guardarTokenNotificacion = async (userId: string, userType: 'client
 };
 
 /**
- * Verifica si un correo existe en la colección especificada
+ * Verifica si un correo existe en la colección 'usuarios'
  */
 export const verificarCorreoExistente = async (email: string, userType: 'cliente' | 'alqui-amigo') => {
   try {
-    const collectionName = userType === 'cliente' ? 'clientes' : 'alqui-amigos';
-    const q = query(collection(db, collectionName), where('email', '==', email));
+    const q = query(
+      collection(db, 'usuarios'), 
+      where('correo', '==', email),
+      where('tipo_usuario', '==', userType)
+    );
     const querySnapshot = await getDocs(q);
     
-    return !querySnapshot.empty; // Retorna true si existe
+    return !querySnapshot.empty;
   } catch (error) {
     console.error("Error verificando correo:", error);
     return false;
@@ -284,7 +331,7 @@ export const verificarCorreoExistente = async (email: string, userType: 'cliente
 };
 
 /**
- * Envía el correo oficial de reseteo de Firebase (Método seguro)
+ * Envía el correo oficial de reseteo de Firebase
  */
 export const enviarResetPasswordFirebase = async (email: string) => {
   try {
@@ -295,7 +342,6 @@ export const enviarResetPasswordFirebase = async (email: string) => {
   } catch (error: any) {
     console.error("Error Firebase Reset:", error.code, error.message);
     
-    // Errores comunes traducidos
     if (error.code === 'auth/user-not-found') return { success: false, error: 'Este correo no está registrado en el sistema de autenticación.' };
     if (error.code === 'auth/invalid-email') return { success: false, error: 'El formato del correo es inválido.' };
     if (error.code === 'auth/too-many-requests') return { success: false, error: 'Demasiados intentos. Espera unos minutos.' };

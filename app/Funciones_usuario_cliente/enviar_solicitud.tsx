@@ -173,7 +173,7 @@ export default function EnviarSolicitudScreen() {
 
     const nuevaSolicitud: NuevaSolicitud = {
       cliente_id: auth.currentUser?.uid || '',
-      alqui_amigo_id: alquiAmigo.uid,
+      amigo_id: alquiAmigo.uid,
       nombre_solicitante: clienteData.nombres,
       fotografia_solicitante: clienteData.fotoURL || '',
       informacion_general_solicitante: `Edad: ${calcularEdad(clienteData.fechaNacimiento)} años`,

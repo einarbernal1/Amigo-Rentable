@@ -51,28 +51,38 @@ export default function CalendarioScreen() {
       const user = auth.currentUser;
       if (!user) return;
 
-      // 1. Traer solo solicitudes ACEPTADAS
-      const q = query(
+      // 1. Traer solo solicitudes ACEPTADAS (buscar por ambos campos para compat)
+      const q1 = query(
+        collection(db, 'solicitudes'),
+        where('amigo_id', '==', user.uid),
+        where('estado_solicitud', '==', 'aceptada')
+      );
+      const q2 = query(
         collection(db, 'solicitudes'),
         where('alqui_amigo_id', '==', user.uid),
         where('estado_solicitud', '==', 'aceptada')
       );
 
-      const querySnapshot = await getDocs(q);
+      const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const docsMap = new Map();
+      snap1.docs.forEach(d => docsMap.set(d.id, d));
+      snap2.docs.forEach(d => docsMap.set(d.id, d));
+      const allDocs = Array.from(docsMap.values());
+
       const citasMap: Record<string, CitaCalendario[]> = {};
       const marcas: any = {};
 
       // 2. Procesar cada cita
       await Promise.all(
-        querySnapshot.docs.map(async (document) => {
+        allDocs.map(async (document: any) => {
           const data = document.data();
           
-          // Obtener nombre del cliente
+          // Obtener nombre del cliente desde 'usuarios'
           let nombreCliente = 'Cliente';
           try {
-            const clienteDoc = await getDoc(doc(db, 'clientes', data.cliente_id));
-            if (clienteDoc.exists()) {
-              nombreCliente = clienteDoc.data().nombres;
+            const usuarioDoc = await getDoc(doc(db, 'usuarios', data.cliente_id));
+            if (usuarioDoc.exists()) {
+              nombreCliente = usuarioDoc.data().nombres;
             }
           } catch (e) { console.error(e); }
 

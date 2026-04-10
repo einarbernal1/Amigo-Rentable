@@ -100,16 +100,24 @@ export default function EditarPerfilScreen() {
       const user = auth.currentUser;
       if (!user) return;
 
-      const docRef = doc(db, 'alqui-amigos', user.uid);
-      const docSnap = await getDoc(docRef);
+      // Leer datos base de 'usuarios'
+      const usuarioRef = doc(db, 'usuarios', user.uid);
+      const usuarioSnap = await getDoc(usuarioRef);
 
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setNombre(data.nombres || 'Usuario');
-        setFotoURL(data.fotoURL || '');
+      // Leer datos de 'amigos'
+      const amigoRef = doc(db, 'amigos', user.uid);
+      const amigoSnap = await getDoc(amigoRef);
+
+      if (usuarioSnap.exists()) {
+        const uData = usuarioSnap.data();
+        setNombre(uData.nombres || 'Usuario');
+        setFotoURL(uData.fotografia || '');
+      }
         
-        if (data.disponibilidadHoraria) {
-          const horariosDB = data.disponibilidadHoraria;
+      if (amigoSnap.exists()) {
+        const aData = amigoSnap.data();
+        if (aData.horarios_trabajo) {
+          const horariosDB = aData.horarios_trabajo;
           setMapaHorarios(horariosDB);
 
           const diasEncontrados = ORDEN_DIAS.filter(dia => {
@@ -269,12 +277,22 @@ export default function EditarPerfilScreen() {
         finalFotoURL = await subirImagenStorage(nuevaFotoURI);
       }
 
-      // 2. Guardar en Firestore
-      const userRef = doc(db, 'alqui-amigos', user.uid);
-      await updateDoc(userRef, {
-        fotoURL: finalFotoURL,
-        disponibilidadHoraria: mapaHorarios
-      });
+      // 2. Guardar en Firestore — separar datos entre 'usuarios' y 'amigos'
+      // Foto va en 'usuarios'
+      if (nuevaFotoURI) {
+        const usuarioRef = doc(db, 'usuarios', user.uid);
+        await updateDoc(usuarioRef, {
+          fotografia: finalFotoURL,
+        });
+      }
+      
+      // Horarios van en 'amigos'
+      if (diasSeleccionados.length > 0) {
+        const amigoRef = doc(db, 'amigos', user.uid);
+        await updateDoc(amigoRef, {
+          horarios_trabajo: mapaHorarios
+        });
+      }
 
       setModalInfo({ title: '¡Éxito!', msg: 'Perfil actualizado correctamente.', type: 'exito' });
       setModalVisible(true);

@@ -89,11 +89,16 @@ export default function CalificarExperienciaScreen() {
 
         if (solSnap.exists()) {
           const solData = solSnap.data();
-          const amigoId = solData.alqui_amigo_id;
+          const amigoId = solData.amigo_id || solData.alqui_amigo_id;
 
-          // B) Buscar al Alqui-Amigo
-          const amigoRef = doc(db, 'alqui-amigos', amigoId);
+          // B) Buscar datos del Alqui-Amigo
+          // Obtener datos de 'amigos'
+          const amigoRef = doc(db, 'amigos', amigoId);
           const amigoSnap = await getDoc(amigoRef);
+          
+          // Obtener datos base de 'usuarios'
+          const usuarioRef = doc(db, 'usuarios', amigoId);
+          const usuarioSnap = await getDoc(usuarioRef);
           
           let datosAmigo = {
             nombres: 'Usuario',
@@ -102,14 +107,15 @@ export default function CalificarExperienciaScreen() {
             telefono: ''
           };
 
+          if (usuarioSnap.exists()) {
+            const uData = usuarioSnap.data();
+            datosAmigo.nombres = uData.nombres || 'Usuario';
+            datosAmigo.fotoURL = uData.fotografia || '';
+            datosAmigo.telefono = uData.nro_telefonico || '';
+          }
           if (amigoSnap.exists()) {
-            const d = amigoSnap.data();
-            datosAmigo = {
-              nombres: d.nombres || 'Usuario',
-              fotoURL: d.fotoURL || '', // Aquí guardamos fotoURL
-              rating: d.rating || 0,
-              telefono: d.telefono || ''
-            };
+            const aData = amigoSnap.data();
+            datosAmigo.rating = aData.calificacion || 0;
           }
 
           setDatosCompleto({

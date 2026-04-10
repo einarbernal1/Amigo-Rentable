@@ -130,14 +130,23 @@ export default function SolicitudesScreen() {
           let telefonoAmigo = '';
           let ratingAmigo = 0;    
 
+          // Compatibilidad: usa amigo_id o alqui_amigo_id
+          const amigoId = data.amigo_id || data.alqui_amigo_id;
+
           try {
-            const amigoDoc = await getDoc(doc(db, 'alqui-amigos', data.alqui_amigo_id));
+            // Obtener datos base del usuario
+            const usuarioDoc = await getDoc(doc(db, 'usuarios', amigoId));
+            if (usuarioDoc.exists()) {
+              const uData = usuarioDoc.data();
+              nombreAmigo = uData.nombres;
+              fotoAmigo = uData.fotografia || '';
+              telefonoAmigo = uData.nro_telefonico || '';
+            }
+            // Obtener rating de amigos
+            const amigoDoc = await getDoc(doc(db, 'amigos', amigoId));
             if (amigoDoc.exists()) {
               const amigoData = amigoDoc.data();
-              nombreAmigo = amigoData.nombres;
-              fotoAmigo = amigoData.fotoURL;
-              telefonoAmigo = amigoData.telefono || ''; 
-              ratingAmigo = amigoData.rating || 0;
+              ratingAmigo = amigoData.calificacion || 0;
             }
           } catch (e) {
             console.error("Error buscando amigo", e);
@@ -154,7 +163,7 @@ export default function SolicitudesScreen() {
 
           listaProcesada.push({
             id: solicitudId,
-            alqui_amigo_id: data.alqui_amigo_id,
+            alqui_amigo_id: amigoId,
             nombreAmigo,
             fotoAmigo,
             telefonoAmigo, 
@@ -165,7 +174,7 @@ export default function SolicitudesScreen() {
             duracion: data.duracion,
             estado: estadoFinal,
             yaCalificada: data.estado_calificacion || false,
-            motivosRechazo: data.motivos_rechazo || [] // OBTENEMOS LOS MOTIVOS
+            motivosRechazo: data.motivos_rechazo || []
           });
         })
       );

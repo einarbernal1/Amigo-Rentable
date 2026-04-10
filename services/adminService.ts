@@ -14,20 +14,38 @@ import { enviarNotificacionPush } from './notificationService';
 import { enviarCorreoSancion } from './emailService';
 
 
+/**
+ * Obtiene solicitudes de registro pendientes
+ * Ahora busca en colección unificada 'usuarios' donde estadoCuenta === 'pendiente'
+ */
 export const obtenerSolicitudesRegistro = async () => {
   try {
-    // 1. Buscar en Clientes pendientes
-    const qClientes = query(collection(db, 'clientes'), where('estadoCuenta', '==', 'pendiente'));
-    const snapClientes = await getDocs(qClientes);
-    
-    // 2. Buscar en Alqui-Amigos pendientes
-    const qAmigos = query(collection(db, 'alqui-amigos'), where('estadoCuenta', '==', 'pendiente'));
-    const snapAmigos = await getDocs(qAmigos);
+    const q = query(collection(db, 'usuarios'), where('estadoCuenta', '==', 'pendiente'));
+    const snapshot = await getDocs(q);
 
     const lista: any[] = [];
 
-    snapClientes.forEach(doc => lista.push({ ...doc.data(), id: doc.id, coleccion: 'clientes' }));
-    snapAmigos.forEach(doc => lista.push({ ...doc.data(), id: doc.id, coleccion: 'alqui-amigos' }));
+    snapshot.forEach(document => {
+      const data = document.data();
+      // Mapear campos para compatibilidad con la pantalla admin
+      lista.push({
+        ...data,
+        id: document.id,
+        // Campos mapeados para compatibilidad con UI existente
+        email: data.correo,
+        nombres: data.nombres,
+        cedula: data.cedula_identidad,
+        fechaNacimiento: data.fecha_nacimiento,
+        genero: data.genero,
+        telefono: data.nro_telefonico,
+        fotoURL: data.fotografia,
+        userType: data.tipo_usuario,
+        descripcion: data.descripcion,
+        intereses: data.intereses,
+        // Colección para referencia interna (ya no necesaria para la lógica, pero mantiene compat)
+        coleccion: 'usuarios',
+      });
+    });
 
     return lista;
   } catch (error) {
@@ -36,16 +54,19 @@ export const obtenerSolicitudesRegistro = async () => {
   }
 };
 
+/**
+ * Acepta o rechaza un usuario
+ * Ahora actualiza en colección 'usuarios'
+ */
 export const gestionarUsuario = async (id: string, coleccion: string, accion: 'aceptar' | 'rechazar') => {
   try {
-    const userRef = doc(db, coleccion, id);
+    // Siempre actualizamos en 'usuarios' (colección unificada)
+    const userRef = doc(db, 'usuarios', id);
     
     await updateDoc(userRef, {
       activo: accion === 'aceptar',
       estadoCuenta: accion === 'aceptar' ? 'aceptada' : 'rechazada'
     });
-    
-    // AQUÍ PODRÍAS AGREGAR LÓGICA PARA ENVIAR EMAIL (Requiere Cloud Functions o servicio externo)
     
     return { success: true };
   } catch (error) {
@@ -53,14 +74,26 @@ export const gestionarUsuario = async (id: string, coleccion: string, accion: 'a
   }
 };
 
+/**
+ * Obtiene resumen de usuarios activos
+ * Ahora cuenta en 'usuarios' filtrando por tipo_usuario
+ */
 export const obtenerResumen = async () => {
   try {
     // Contar Alqui-Amigos Activos
-    const qAmigos = query(collection(db, 'alqui-amigos'), where('activo', '==', true));
+    const qAmigos = query(
+      collection(db, 'usuarios'), 
+      where('activo', '==', true),
+      where('tipo_usuario', '==', 'alqui-amigo')
+    );
     const snapAmigos = await getCountFromServer(qAmigos);
 
     // Contar Clientes Activos
-    const qClientes = query(collection(db, 'clientes'), where('activo', '==', true));
+    const qClientes = query(
+      collection(db, 'usuarios'), 
+      where('activo', '==', true),
+      where('tipo_usuario', '==', 'cliente')
+    );
     const snapClientes = await getCountFromServer(qClientes);
 
     return {
@@ -72,42 +105,54 @@ export const obtenerResumen = async () => {
   }
 };
 
+/**
+ * Obtiene denuncias pendientes
+ * Ahora busca datos del acusado en 'amigos' + 'usuarios'
+ */
 export const obtenerDenunciasPendientes = async () => {
   try {
-    // 1. Traer solo denuncias pendientes
     const q = query(collection(db, 'denuncias'), where('estado', '==', 'pendiente'));
     const snapshot = await getDocs(q);
     
     const listaReportes: any[] = [];
 
-    // 2. Por cada denuncia, buscar los datos del Alqui-Amigo acusado
     await Promise.all(
       snapshot.docs.map(async (document) => {
         const dataDenuncia = document.data();
         let alquiAmigoData = {
           nombres: 'Usuario Eliminado',
           fotoURL: '',
-          faltas: 0 // Campo nuevo que asumimos existirá
+          faltas: 0
         };
 
         try {
-          const amigoRef = doc(db, 'alqui-amigos', dataDenuncia.alqui_amigo_id);
+          // Obtener faltas de 'amigos'
+          const amigoRef = doc(db, 'amigos', dataDenuncia.amigo_id);
           const amigoSnap = await getDoc(amigoRef);
+          
+          // Obtener datos base de 'usuarios'
+          const usuarioRef = doc(db, 'usuarios', dataDenuncia.amigo_id);
+          const usuarioSnap = await getDoc(usuarioRef);
+          
+          if (usuarioSnap.exists()) {
+            const uData = usuarioSnap.data();
+            alquiAmigoData.nombres = uData.nombres;
+            alquiAmigoData.fotoURL = uData.fotografia || '';
+          }
+          
           if (amigoSnap.exists()) {
-            const d = amigoSnap.data();
-            alquiAmigoData = {
-              nombres: d.nombres,
-              fotoURL: d.fotoURL,
-              faltas: d.faltas || 0 // Si no tiene faltas, es 0
-            };
+            const aData = amigoSnap.data();
+            alquiAmigoData.faltas = aData.nro_faltas || 0;
           }
         } catch (e) {
           console.error("Error buscando alqui-amigo denunciado", e);
         }
 
         listaReportes.push({
-          id: document.id, // ID de la denuncia
+          id: document.id,
           ...dataDenuncia,
+          // Compatibilidad: la pantalla usa alqui_amigo_id
+          alqui_amigo_id: dataDenuncia.amigo_id,
           datosAcusado: alquiAmigoData
         });
       })
@@ -120,6 +165,10 @@ export const obtenerDenunciasPendientes = async () => {
   }
 };
 
+/**
+ * Resuelve una denuncia (strike o ban)
+ * Ahora actualiza faltas en 'amigos' y lee pushToken/email de 'usuarios'
+ */
 export const resolverDenuncia = async (
   denunciaId: string, 
   alquiAmigoId: string, 
@@ -127,54 +176,60 @@ export const resolverDenuncia = async (
 ) => {
   try {
     const denunciaRef = doc(db, 'denuncias', denunciaId);
-    const alquiAmigoRef = doc(db, 'alqui-amigos', alquiAmigoId);
+    const amigoRef = doc(db, 'amigos', alquiAmigoId);
+    const usuarioRef = doc(db, 'usuarios', alquiAmigoId);
 
-    //Obtenemos los dato sdel usuario para ver sus faltas y token
-    const usuarioSnap = await getDoc(alquiAmigoRef);
+    // Obtener datos del amigo (faltas)
+    const amigoSnap = await getDoc(amigoRef);
+    if (!amigoSnap.exists()) return { success: false, error: 'Amigo no encontrado' };
+    
+    const amigoData = amigoSnap.data();
+    const faltasActuales = amigoData.nro_faltas || 0;
+
+    // Obtener datos del usuario (email, pushToken, nombre)
+    const usuarioSnap = await getDoc(usuarioRef);
     if (!usuarioSnap.exists()) return { success: false, error: 'Usuario no encontrado' };
     
     const usuarioData = usuarioSnap.data();
-    const faltasActuales = usuarioData.faltas || 0;
-    const emailUsuario = usuarioData.email;
+    const emailUsuario = usuarioData.correo;
     const pushToken = usuarioData.pushToken;
     const nombreUsuario = usuarioData.nombres;
 
-    //Determinar la acción final
+    // Determinar la acción final
     let accionFinal = accionSolicitada;
     let nuevasFaltas = faltasActuales;
 
-    // Si es strike, calculamos si llegamos al límite
     if (accionSolicitada === 'strike') {
       nuevasFaltas = faltasActuales + 1;
       if (nuevasFaltas >= 3) {
-        accionFinal = 'ban'; //AUTOMÁTICAMENTE SE VUELVE BAN
+        accionFinal = 'ban';
       }
     }
 
-    //Actualizar la Denuncia
+    // Actualizar la Denuncia
     await updateDoc(denunciaRef, {
       estado: 'revisada',
-      accionTomada: accionFinal
+      accion_tomada: accionFinal
     });
 
-    //Aplicar castigo al usuario en BD
+    // Aplicar castigo
     if (accionFinal === 'ban') {
-      // Baneo definitivo
-      await updateDoc(alquiAmigoRef, {
+      // Baneo: actualizar en 'amigos' (faltas) y 'usuarios' (activo/estadoCuenta)
+      await updateDoc(amigoRef, {
+        nro_faltas: nuevasFaltas
+      });
+      await updateDoc(usuarioRef, {
         activo: false,
         estadoCuenta: 'bloqueada',
-        faltas: nuevasFaltas
       });
     } else {
-      // Solo sumar falta
-      await updateDoc(alquiAmigoRef, {
-        faltas: increment(1)
+      // Solo sumar falta en 'amigos'
+      await updateDoc(amigoRef, {
+        nro_faltas: increment(1)
       });
     }
 
-    //NOTIFICACIONES (Email y Push)
-    
-    //Enviar Notificación Push (Si tiene token)
+    // NOTIFICACIONES
     if (pushToken) {
       if (accionFinal === 'ban') {
         await enviarNotificacionPush(pushToken, "Cuenta Suspendida", "Has acumulado 3 faltas. Tu cuenta ha sido bloqueada permanentemente.");
@@ -183,7 +238,6 @@ export const resolverDenuncia = async (
       }
     }
 
-    //Enviar Correo Electrónico
     if (emailUsuario) {
       await enviarCorreoSancion(emailUsuario, nombreUsuario, accionFinal, nuevasFaltas);
     }

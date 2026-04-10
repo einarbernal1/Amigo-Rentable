@@ -15,7 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router'; 
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, query, orderBy, where } from 'firebase/firestore';
 import { db, auth } from '../../config/firebase';
 import { getUserData } from '../../services/authService';
 import { Feather } from '@expo/vector-icons';
@@ -86,31 +86,49 @@ export default function BuscarAlquiAmigos() {
   const cargarAlquiAmigos = async () => {
     try {
       setCargando(true);
-      const q = query(
-        collection(db, 'alqui-amigos'),
-        where('activo', '==', true),
-        where('estadoCuenta', '==', 'aceptada'),
-        orderBy('rating', 'desc')
+      // 1. Obtener todos los amigos
+      const qAmigos = query(
+        collection(db, 'amigos'),
+        orderBy('calificacion', 'desc')
       );
-      const querySnapshot = await getDocs(q);
+      const amigosSnapshot = await getDocs(qAmigos);
       
       const amigos: AlquiAmigo[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        amigos.push({
-          uid: doc.id,
-          nombres: data.nombres || 'Sin nombre',
-          intereses: data.intereses || 'Sin intereses',
-          fotoURL: data.fotoURL || '',
-          rating: data.rating || 0,
-          tarifa: data.tarifa || '0',
-          descripcion: data.descripcion || '',
-          genero: data.genero || '', 
-          fechaNacimiento: data.fechaNacimiento || '',
-          telefono: data.telefono || '',
-          disponibilidadHoraria: data.disponibilidadHoraria || {},
-        });
-      });
+
+      // 2. Para cada amigo, obtener sus datos base de 'usuarios'
+      await Promise.all(
+        amigosSnapshot.docs.map(async (amigoDoc) => {
+          const amigoData = amigoDoc.data();
+          
+          // Leer datos base del usuario
+          const usuarioRef = doc(db, 'usuarios', amigoDoc.id);
+          const usuarioSnap = await getDoc(usuarioRef);
+          
+          if (usuarioSnap.exists()) {
+            const userData = usuarioSnap.data();
+            
+            // Solo incluir usuarios activos y aceptados
+            if (userData.activo === true && userData.estadoCuenta === 'aceptada') {
+              amigos.push({
+                uid: amigoDoc.id,
+                nombres: userData.nombres || 'Sin nombre',
+                intereses: userData.intereses || 'Sin intereses',
+                fotoURL: userData.fotografia || '',
+                rating: amigoData.calificacion || 0,
+                tarifa: amigoData.tarifa_hora || '0',
+                descripcion: userData.descripcion || '',
+                genero: userData.genero || '', 
+                fechaNacimiento: userData.fecha_nacimiento || '',
+                telefono: userData.nro_telefonico || '',
+                disponibilidadHoraria: amigoData.horarios_trabajo || {},
+              });
+            }
+          }
+        })
+      );
+
+      // Ordenar por rating desc (Promise.all no garantiza orden)
+      amigos.sort((a, b) => b.rating - a.rating);
       
       setAlquiAmigos(amigos);
       setAlquiAmigosFiltrados(amigos);

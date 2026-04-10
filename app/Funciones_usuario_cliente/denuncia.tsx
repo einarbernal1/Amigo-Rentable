@@ -87,11 +87,23 @@ export default function DenunciaScreen() {
     const cargarDatosAcusado = async () => {
       if (!alquiAmigoId) return;
       try {
-        const amigoRef = doc(db, 'alqui-amigos', alquiAmigoId as string);
-        const amigoSnap = await getDoc(amigoRef);
+        // Obtener datos base de 'usuarios'
+        const usuarioRef = doc(db, 'usuarios', alquiAmigoId as string);
+        const usuarioSnap = await getDoc(usuarioRef);
         
-        if (amigoSnap.exists()) {
-          setDatosAmigo(amigoSnap.data());
+        if (usuarioSnap.exists()) {
+          const uData = usuarioSnap.data();
+          // Obtener rating de 'amigos'
+          const amigoRef = doc(db, 'amigos', alquiAmigoId as string);
+          const amigoSnap = await getDoc(amigoRef);
+          const aData = amigoSnap.exists() ? amigoSnap.data() : {};
+          
+          setDatosAmigo({
+            nombres: uData.nombres,
+            fotoURL: uData.fotografia || '',
+            telefono: uData.nro_telefonico || '',
+            rating: aData.calificacion || 0
+          });
         }
       } catch (error) {
         console.error("Error cargando alqui-amigo denuncia:", error);
@@ -138,9 +150,9 @@ export default function DenunciaScreen() {
 
     const nuevaDenuncia: DenunciaData = {
       cliente_id: auth.currentUser?.uid || '',
-      alqui_amigo_id: alquiAmigoId as string,
+      amigo_id: alquiAmigoId as string,
       solicitud_id: (solicitudId as string) || '', 
-      motivo: motivosSeleccionados, // PASAMOS EL ARREGLO COMPLETO
+      motivo: motivosSeleccionados,
       descripcion: descripcion,
       fecha_creacion: null as any, 
       estado: 'pendiente'
