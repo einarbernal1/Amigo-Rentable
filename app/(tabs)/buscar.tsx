@@ -111,7 +111,7 @@ export default function BuscarAlquiAmigos() {
             if (userData.activo === true && userData.estadoCuenta === 'aceptada') {
               amigos.push({
                 uid: amigoDoc.id,
-                nombres: userData.nombres || 'Sin nombre',
+                nombres: `${userData.nombres} ${userData.apellidos || ''}`.trim() || 'Sin nombre',
                 intereses: userData.intereses || 'Sin intereses',
                 fotoURL: userData.fotografia || '',
                 rating: amigoData.calificacion || 0,

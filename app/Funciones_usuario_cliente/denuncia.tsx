@@ -99,7 +99,7 @@ export default function DenunciaScreen() {
           const aData = amigoSnap.exists() ? amigoSnap.data() : {};
           
           setDatosAmigo({
-            nombres: uData.nombres,
+            nombres: `${uData.nombres} ${uData.apellidos || ''}`.trim(),
             fotoURL: uData.fotografia || '',
             telefono: uData.nro_telefonico || '',
             rating: aData.calificacion || 0

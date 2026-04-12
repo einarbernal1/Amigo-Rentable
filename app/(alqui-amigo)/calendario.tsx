@@ -82,7 +82,7 @@ export default function CalendarioScreen() {
           try {
             const usuarioDoc = await getDoc(doc(db, 'usuarios', data.cliente_id));
             if (usuarioDoc.exists()) {
-              nombreCliente = usuarioDoc.data().nombres;
+              nombreCliente = `${usuarioDoc.data().nombres} ${usuarioDoc.data().apellidos || ''}`.trim();
             }
           } catch (e) { console.error(e); }
 

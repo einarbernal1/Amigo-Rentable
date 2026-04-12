@@ -33,7 +33,7 @@ export const obtenerSolicitudesRegistro = async () => {
         id: document.id,
         // Campos mapeados para compatibilidad con UI existente
         email: data.correo,
-        nombres: data.nombres,
+        nombres: `${data.nombres} ${data.apellidos || ''}`.trim(),
         cedula: data.cedula_identidad,
         fechaNacimiento: data.fecha_nacimiento,
         genero: data.genero,
@@ -136,7 +136,7 @@ export const obtenerDenunciasPendientes = async () => {
           
           if (usuarioSnap.exists()) {
             const uData = usuarioSnap.data();
-            alquiAmigoData.nombres = uData.nombres;
+            alquiAmigoData.nombres = `${uData.nombres} ${uData.apellidos || ''}`.trim();
             alquiAmigoData.fotoURL = uData.fotografia || '';
           }
           
@@ -193,7 +193,7 @@ export const resolverDenuncia = async (
     const usuarioData = usuarioSnap.data();
     const emailUsuario = usuarioData.correo;
     const pushToken = usuarioData.pushToken;
-    const nombreUsuario = usuarioData.nombres;
+    const nombreUsuario = `${usuarioData.nombres} ${usuarioData.apellidos || ''}`.trim();
 
     // Determinar la acción final
     let accionFinal = accionSolicitada;

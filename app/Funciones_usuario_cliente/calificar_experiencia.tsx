@@ -109,7 +109,7 @@ export default function CalificarExperienciaScreen() {
 
           if (usuarioSnap.exists()) {
             const uData = usuarioSnap.data();
-            datosAmigo.nombres = uData.nombres || 'Usuario';
+            datosAmigo.nombres = `${uData.nombres} ${uData.apellidos || ''}`.trim() || 'Usuario';
             datosAmigo.fotoURL = uData.fotografia || '';
             datosAmigo.telefono = uData.nro_telefonico || '';
           }

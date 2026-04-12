@@ -94,6 +94,7 @@ export default function RegisterScreen() {
 
   // Formulario Común
   const [nombres, setNombres] = useState('');
+  const [apellidos, setApellidos] = useState('');
   const [cedula, setCedula] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState(new Date());
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
@@ -222,8 +223,19 @@ export default function RegisterScreen() {
 
   // --- VALIDACIONES ---
   const validarCampos = (): boolean => {
-    if (!nombres || !cedula || !telefono || !email || !contrasena) {
+    if (!nombres || !apellidos || !cedula || !telefono || !email || !contrasena) {
       mostrarModal('Error', 'Por favor completa todos los campos obligatorios.', 'error');
+      return false;
+    }
+    
+    // Validar Nombres y Apellidos
+    const regexNombres = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]{1,50}$/;
+    if (!regexNombres.test(nombres)) {
+      mostrarModal('Error', 'Los nombres solo deben contener letras y no exceder los 50 caracteres.', 'error');
+      return false;
+    }
+    if (!regexNombres.test(apellidos)) {
+      mostrarModal('Error', 'Los apellidos solo deben contener letras y no exceder los 50 caracteres.', 'error');
       return false;
     }
     if (contrasena !== confirmarContrasena) {
@@ -285,7 +297,7 @@ export default function RegisterScreen() {
   };
 
   const limpiarCampos = () => {
-    setNombres(''); setCedula(''); setFechaNacimiento(new Date()); setGenero('');
+    setNombres(''); setApellidos(''); setCedula(''); setFechaNacimiento(new Date()); setGenero('');
     setTelefono(''); setEmail(''); setContrasena(''); setConfirmarContrasena('');
     setIntereses(''); setDescripcion(''); setFotoURI(''); setTarifa('');
     setDisponibilidad(estadoInicialDisponibilidad());
@@ -300,6 +312,7 @@ export default function RegisterScreen() {
         password: contrasena,
         userType: tipoUsuario,
         nombres: nombres.trim(),
+        apellidos: apellidos.trim(),
         cedula: cedula.trim(),
         fechaNacimiento: fechaNacimiento.toISOString().split('T')[0],
         genero,
@@ -363,7 +376,8 @@ export default function RegisterScreen() {
           </View>
 
           {/* Campos Generales */}
-          <TextInput style={styles.input} placeholder="Nombres y Apellidos *" placeholderTextColor="#888" value={nombres} onChangeText={setNombres} editable={!cargando} />
+          <TextInput style={styles.input} placeholder="Nombres *" placeholderTextColor="#888" value={nombres} onChangeText={setNombres} editable={!cargando} maxLength={50} />
+          <TextInput style={styles.input} placeholder="Apellidos *" placeholderTextColor="#888" value={apellidos} onChangeText={setApellidos} editable={!cargando} maxLength={50} />
           <TextInput style={styles.input} placeholder="Cédula de Identidad *" placeholderTextColor="#888" value={cedula} onChangeText={setCedula} keyboardType="numeric" editable={!cargando} />
           
           <TouchableOpacity style={styles.input} onPress={() => setMostrarSelectorFecha(true)} disabled={cargando}>

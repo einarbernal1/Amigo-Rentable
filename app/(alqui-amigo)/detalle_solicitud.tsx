@@ -57,7 +57,7 @@ export default function DetalleSolicitudScreen() {
               const uData = usuarioSnap.data();
               // Mapeamos los datos del usuario
               clienteInfo = {
-                nombreCliente: uData.nombres || 'Usuario',
+                nombreCliente: `${uData.nombres} ${uData.apellidos || ''}`.trim() || 'Usuario',
                 fotoCliente: uData.fotografia || '',
                 email: uData.correo || 'No disponible',
                 telefonoCliente: uData.nro_telefonico || '',

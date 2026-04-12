@@ -210,7 +210,7 @@ export default function SolicitudesAlquiAmigoScreen() {
             const usuarioDoc = await getDoc(doc(db, 'usuarios', data.cliente_id));
             if (usuarioDoc.exists()) {
               const uData = usuarioDoc.data();
-              clienteInfo = { nombres: uData.nombres || 'Usuario', fotoURL: uData.fotografia || '', telefono: uData.nro_telefonico || '', email: uData.correo || 'No disponible', genero: uData.genero || 'No especificado', fechaNacimiento: uData.fecha_nacimiento || '', pushToken: uData.pushToken || null };
+              clienteInfo = { nombres: `${uData.nombres} ${uData.apellidos || ''}`.trim() || 'Usuario', fotoURL: uData.fotografia || '', telefono: uData.nro_telefonico || '', email: uData.correo || 'No disponible', genero: uData.genero || 'No especificado', fechaNacimiento: uData.fecha_nacimiento || '', pushToken: uData.pushToken || null };
             }
           } catch (e) { console.error(e); }
 

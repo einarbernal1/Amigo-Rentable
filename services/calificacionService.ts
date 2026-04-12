@@ -38,8 +38,9 @@ import {
         
         // Guardar la calificación individual
         const nuevaCalificacionRef = doc(collection(db, 'calificaciones'));
+        const { solicitud_id, ...datosCalificacion } = datos;
         transaction.set(nuevaCalificacionRef, {
-          ...datos,
+          ...datosCalificacion,
           fecha_calificacion: Timestamp.now()
         });
   

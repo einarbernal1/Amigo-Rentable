@@ -37,6 +37,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
     password: string;
     userType: 'cliente' | 'alqui-amigo';
     nombres: string;
+    apellidos: string;
     cedula: string;
     fechaNacimiento: string;
     genero: string;
@@ -101,7 +102,7 @@ export const registerUser = async (data: RegisterData) => {
     const usuarioData: any = {
       usuario_id: user.uid,
       nombres: data.nombres,
-      apellidos: '',
+      apellidos: data.apellidos,
       tipo_usuario: data.userType,
       fecha_nacimiento: data.fechaNacimiento,
       cedula_identidad: data.cedula,
@@ -139,7 +140,6 @@ export const registerUser = async (data: RegisterData) => {
         // Campos adicionales para cálculos de rating
         cantidadCalificaciones: 0,
         sumaCalificaciones: 0,
-        totalReservas: 0,
       });
     }
 
@@ -247,7 +247,7 @@ export const registerUser = async (data: RegisterData) => {
         uid: userId,
         email: baseData.correo,
         userType: baseData.tipo_usuario,
-        nombres: baseData.nombres,
+        nombres: `${baseData.nombres} ${baseData.apellidos || ''}`.trim(),
         cedula: baseData.cedula_identidad,
         fechaNacimiento: baseData.fecha_nacimiento,
         genero: baseData.genero,
@@ -272,7 +272,6 @@ export const registerUser = async (data: RegisterData) => {
           mappedData.faltas = amigoData.nro_faltas || 0;
           mappedData.cantidadCalificaciones = amigoData.cantidadCalificaciones || 0;
           mappedData.sumaCalificaciones = amigoData.sumaCalificaciones || 0;
-          mappedData.totalReservas = amigoData.totalReservas || 0;
         }
       } else {
         const clienteDoc = await getDoc(doc(db, 'clientes', userId));

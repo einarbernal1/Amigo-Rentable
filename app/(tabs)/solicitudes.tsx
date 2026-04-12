@@ -138,7 +138,7 @@ export default function SolicitudesScreen() {
             const usuarioDoc = await getDoc(doc(db, 'usuarios', amigoId));
             if (usuarioDoc.exists()) {
               const uData = usuarioDoc.data();
-              nombreAmigo = uData.nombres;
+              nombreAmigo = `${uData.nombres} ${uData.apellidos || ''}`.trim();
               fotoAmigo = uData.fotografia || '';
               telefonoAmigo = uData.nro_telefonico || '';
             }

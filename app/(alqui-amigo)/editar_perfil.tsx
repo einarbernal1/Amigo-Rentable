@@ -110,7 +110,7 @@ export default function EditarPerfilScreen() {
 
       if (usuarioSnap.exists()) {
         const uData = usuarioSnap.data();
-        setNombre(uData.nombres || 'Usuario');
+        setNombre(`${uData.nombres} ${uData.apellidos || ''}`.trim() || 'Usuario');
         setFotoURL(uData.fotografia || '');
       }
         
