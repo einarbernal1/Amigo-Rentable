@@ -85,6 +85,21 @@ export default function DetalleAlquiAmigoScreen() {
     });
   };
 
+  // Calcular edad a partir de la fecha de nacimiento
+  const calcularEdad = (fechaNacimiento: string): number | null => {
+    if (!fechaNacimiento) return null;
+    const hoy = new Date();
+    const nacimiento = new Date(fechaNacimiento);
+    if (isNaN(nacimiento.getTime())) return null;
+    let edad = hoy.getFullYear() - nacimiento.getFullYear();
+    const mesActual = hoy.getMonth();
+    const mesNacimiento = nacimiento.getMonth();
+    if (mesActual < mesNacimiento || (mesActual === mesNacimiento && hoy.getDate() < nacimiento.getDate())) {
+      edad--;
+    }
+    return edad;
+  };
+
   //Enviar a formulario de solicitud
   const irAFormularioSolicitud = () => {
     router.push({
@@ -147,6 +162,11 @@ export default function DetalleAlquiAmigoScreen() {
         {/* NOMBRE Y RATING */}
         <Text style={styles.nombreUsuario}>{amigo.nombres}</Text>
         
+        {/* EDAD */}
+        {calcularEdad(amigo.fechaNacimiento) !== null && (
+          <Text style={styles.edadTexto}>{calcularEdad(amigo.fechaNacimiento)} años</Text>
+        )}
+
         <View style={styles.ratingContainer}>
           <Text style={styles.ratingTexto}>{amigo.rating ? Number(amigo.rating).toFixed(1) : "0.0"}</Text>
           <Feather name="star" size={20} color="#FFD700" style={{ marginLeft: 5 }} />
@@ -182,6 +202,11 @@ export default function DetalleAlquiAmigoScreen() {
 
         {/* SECCIÓN CONTACTO (Caja gris) */}
         <View style={styles.contactoCard}>
+          <View style={styles.filaContacto}>
+            <Text style={styles.labelContacto}>Tarifa:</Text>
+            <Text style={styles.valorContacto}>Bs. {amigo.tarifa || "0"} / hora</Text>
+          </View>
+
           <View style={styles.filaContacto}>
             <Text style={styles.labelContacto}>Teléfono:</Text>
             <Text style={styles.valorContacto}>+591  {amigo.telefono || "No disponible"}</Text>
@@ -291,6 +316,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
+  edadTexto: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 2,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,7 +386,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 15,
-    marginTop: 4,
+    marginTop: 1,
   },
   filaContacto: {
     flexDirection: 'row',
