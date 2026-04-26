@@ -16,7 +16,7 @@ import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { auth } from '../../config/firebase';
 import { getUserData } from '../../services/authService';
-import { enviarSolicitudServicio, NuevaSolicitud } from '../../services/solicitudesService';
+import { enviarSolicitudServicio, NuevaSolicitud, verificarSolicitudDuplicada } from '../../services/solicitudesService';
 
 // --- 1. COMPONENTE MODAL PERSONALIZADO ---
 interface ModalMensajeProps {
@@ -171,14 +171,35 @@ export default function EnviarSolicitudScreen() {
 
     setCargando(true);
 
+    const fechaStr = fecha.toISOString().split('T')[0];
+    const horaStr = formatoHora(hora);
+
+    // Verificar solicitud duplicada
+    const { duplicada } = await verificarSolicitudDuplicada(
+      auth.currentUser?.uid || '',
+      alquiAmigo.uid,
+      fechaStr,
+      horaStr
+    );
+
+    if (duplicada) {
+      setCargando(false);
+      mostrarModal(
+        "Solicitud Duplicada",
+        "Ya existe una solicitud con la misma fecha, hora y alqui-amigo. Revisa tus solicitudes enviadas.",
+        'error'
+      );
+      return;
+    }
+
     const nuevaSolicitud: NuevaSolicitud = {
       cliente_id: auth.currentUser?.uid || '',
       amigo_id: alquiAmigo.uid,
       nombre_solicitante: clienteData.nombres,
       fotografia_solicitante: clienteData.fotoURL || '',
       informacion_general_solicitante: `Edad: ${calcularEdad(clienteData.fechaNacimiento)} años`,
-      fecha_salida: fecha.toISOString().split('T')[0],
-      hora_salida: formatoHora(hora), // Usamos el nuevo formato manual
+      fecha_salida: fechaStr,
+      hora_salida: horaStr,
       duracion: parseInt(duracion),
       lugar_asistir: ubicacion,
       detalles_de_la_salida: mensaje,

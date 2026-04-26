@@ -107,6 +107,12 @@ export default function RegisterScreen() {
   const [descripcion, setDescripcion] = useState('');
   const [fotoURI, setFotoURI] = useState('');
 
+  // CI (Cédula de Identidad)
+  const [ciAnversoURI, setCiAnversoURI] = useState('');
+  const [ciReversoURI, setCiReversoURI] = useState('');
+  const [ciAnversoNombre, setCiAnversoNombre] = useState('');
+  const [ciReversoNombre, setCiReversoNombre] = useState('');
+
   // Formulario Alqui-Amigo
   const [tarifa, setTarifa] = useState('');
   const [disponibilidad, setDisponibilidad] = useState<Record<DiaKey, HorarioDetalle>>(estadoInicialDisponibilidad());
@@ -141,6 +147,31 @@ export default function RegisterScreen() {
     });
     if (!result.canceled) {
       setFotoURI(result.assets[0].uri);
+    }
+  };
+
+  const manejarSeleccionCI = async (tipo: 'anverso' | 'reverso') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      mostrarModal('Permiso denegado', 'Necesitamos acceso a tu galería para subir la imagen del CI.', 'error');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      const nombre = uri.split('/').pop() || 'imagen_ci';
+      if (tipo === 'anverso') {
+        setCiAnversoURI(uri);
+        setCiAnversoNombre(nombre);
+      } else {
+        setCiReversoURI(uri);
+        setCiReversoNombre(nombre);
+      }
     }
   };
 
@@ -246,6 +277,10 @@ export default function RegisterScreen() {
       mostrarModal('Error', 'Debes subir una fotografía de perfil.', 'error');
       return false;
     }
+    if (!ciAnversoURI || !ciReversoURI) {
+      mostrarModal('Error', 'Debes subir ambas imágenes de tu Cédula de Identidad (anverso y reverso).', 'error');
+      return false;
+    }
     
     // Validación de Edad (18+)
     const edad = calcularEdad(fechaNacimiento);
@@ -300,6 +335,7 @@ export default function RegisterScreen() {
     setNombres(''); setApellidos(''); setCedula(''); setFechaNacimiento(new Date()); setGenero('');
     setTelefono(''); setEmail(''); setContrasena(''); setConfirmarContrasena('');
     setIntereses(''); setDescripcion(''); setFotoURI(''); setTarifa('');
+    setCiAnversoURI(''); setCiReversoURI(''); setCiAnversoNombre(''); setCiReversoNombre('');
     setDisponibilidad(estadoInicialDisponibilidad());
   };
 
@@ -320,6 +356,8 @@ export default function RegisterScreen() {
         intereses: intereses.trim(),
         descripcion: descripcion.trim(),
         fotoURL: fotoURI,
+        ciAnversoURI: ciAnversoURI,
+        ciReversoURI: ciReversoURI,
       };
 
       if (tipoUsuario === 'alqui-amigo') {
@@ -475,6 +513,36 @@ export default function RegisterScreen() {
           </TouchableOpacity>
           {fotoURI && <Image source={{ uri: fotoURI }} style={styles.previewImage} />}
 
+          {/* --- SECCIÓN CI (CÉDULA DE IDENTIDAD) --- */}
+          <Text style={styles.ciSectionTitle}>Cédula de Identidad *</Text>
+          <Text style={styles.ciSectionSubtitle}>Sube fotos del anverso y reverso de tu CI</Text>
+
+          <TouchableOpacity style={styles.ciButton} onPress={() => manejarSeleccionCI('anverso')} disabled={cargando}>
+            <View style={styles.ciButtonContent}>
+              <Feather name={ciAnversoURI ? 'check-circle' : 'upload'} size={22} color={ciAnversoURI ? '#28a745' : '#007BFF'} />
+              <View style={styles.ciButtonTextContainer}>
+                <Text style={styles.ciButtonLabel}>CI - Anverso (Frente)</Text>
+                <Text style={[styles.ciButtonStatus, ciAnversoURI && styles.ciButtonStatusOk]}>
+                  {ciAnversoURI ? 'Imagen subida correctamente ✓' : 'Toca para seleccionar imagen'}
+                </Text>
+              </View>
+              {ciAnversoURI ? <Feather name="refresh-cw" size={16} color="#888" /> : null}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.ciButton} onPress={() => manejarSeleccionCI('reverso')} disabled={cargando}>
+            <View style={styles.ciButtonContent}>
+              <Feather name={ciReversoURI ? 'check-circle' : 'upload'} size={22} color={ciReversoURI ? '#28a745' : '#007BFF'} />
+              <View style={styles.ciButtonTextContainer}>
+                <Text style={styles.ciButtonLabel}>CI - Reverso (Dorso)</Text>
+                <Text style={[styles.ciButtonStatus, ciReversoURI && styles.ciButtonStatusOk]}>
+                  {ciReversoURI ? 'Imagen subida correctamente ✓' : 'Toca para seleccionar imagen'}
+                </Text>
+              </View>
+              {ciReversoURI ? <Feather name="refresh-cw" size={16} color="#888" /> : null}
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.registerButton, cargando && styles.registerButtonDisabled]} onPress={manejarRegistro} disabled={cargando}>
             {cargando ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.registerButtonText}>Registrarse</Text>}
           </TouchableOpacity>
@@ -555,6 +623,17 @@ const styles = StyleSheet.create({
   photoButtonContent: { alignItems: 'center' },
   photoButtonText: { fontSize: 16, color: '#007BFF', fontWeight: '600' },
   previewImage: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: '#007BFF' },
+
+  // CI (Cédula de Identidad)
+  ciSectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginTop: 10, marginBottom: 4, alignSelf: 'flex-start' },
+  ciSectionSubtitle: { fontSize: 13, color: '#888', marginBottom: 12, alignSelf: 'flex-start' },
+  ciButton: { width: '100%', paddingVertical: 14, paddingHorizontal: 15, borderRadius: 10, backgroundColor: '#F9F9F9', borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 10 },
+  ciButtonContent: { flexDirection: 'row', alignItems: 'center' },
+  ciButtonTextContainer: { flex: 1, marginLeft: 12 },
+  ciButtonLabel: { fontSize: 15, fontWeight: '600', color: '#333' },
+  ciButtonStatus: { fontSize: 13, color: '#888', marginTop: 2 },
+  ciButtonStatusOk: { color: '#28a745', fontWeight: '500' },
+
   registerButton: { width: '100%', paddingVertical: 15, borderRadius: 10, backgroundColor: '#007BFF', alignItems: 'center', justifyContent: 'center', marginTop: 10, minHeight: 50 },
   registerButtonDisabled: { backgroundColor: '#80BDFF' },
   registerButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },

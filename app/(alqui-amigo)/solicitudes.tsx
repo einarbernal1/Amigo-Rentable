@@ -137,7 +137,7 @@ interface SolicitudEntrante {
   fecha: string;
   hora: string;
   duracion: number;
-  estado: 'pendiente' | 'aceptada' | 'rechazada' | 'concluida';
+  estado: 'pendiente' | 'aceptada' | 'rechazada' | 'concluida' | 'expirada';
   datosCompletos: any;
   clientePushToken?: string;
 }
@@ -172,7 +172,7 @@ export default function SolicitudesAlquiAmigoScreen() {
 
   const ordenarSolicitudes = (lista: SolicitudEntrante[]) => {
     return lista.sort((a, b) => {
-      const pesoEstado = { 'pendiente': 1, 'aceptada': 2, 'rechazada': 3, 'concluida': 4 };
+      const pesoEstado = { 'pendiente': 1, 'aceptada': 2, 'expirada': 3, 'rechazada': 4, 'concluida': 5 };
       const pesoA = pesoEstado[a.estado] || 99;
       const pesoB = pesoEstado[b.estado] || 99;
       if (pesoA !== pesoB) return pesoA - pesoB;
@@ -238,6 +238,20 @@ export default function SolicitudesAlquiAmigoScreen() {
           });
         })
       );
+
+      // Verificar y marcar solicitudes expiradas
+      for (const sol of lista) {
+        if (sol.estado === 'pendiente') {
+          const yaExpiro = verificarSiExpiro(sol.fecha, sol.hora);
+          if (yaExpiro) {
+            sol.estado = 'expirada';
+            try {
+              await updateDoc(doc(db, 'solicitudes', sol.id), { estado_solicitud: 'expirada' });
+            } catch (e) { console.error('Error actualizando expirada:', e); }
+          }
+        }
+      }
+
       setSolicitudes(ordenarSolicitudes(lista));
     } catch (error) {
       console.error(error);
@@ -267,6 +281,25 @@ export default function SolicitudesAlquiAmigoScreen() {
         agendarRecordatorioLocal("⏰ Recordatorio de Salida", `Tu encuentro con ${nombreCliente} comienza en 30 minutos. ¡Prepárate!`, segundosHastaRecordatorio);
       }
     } catch (e) { console.error(e); }
+  };
+
+  const verificarSiExpiro = (fechaStr: string, horaStr: string) => {
+    try {
+      let [time, modifier] = horaStr.split(' ');
+      let [hours, minutes] = time.split(':');
+      let hoursNum = parseInt(hours, 10);
+      if (hoursNum === 12) hoursNum = 0;
+      if (modifier === 'PM' || modifier === 'pm' || modifier === 'p.m.') hoursNum += 12;
+
+      const fechaEvento = new Date();
+      const [year, month, day] = fechaStr.split('-').map(Number);
+      fechaEvento.setFullYear(year, month - 1, day);
+      fechaEvento.setHours(hoursNum, parseInt(minutes, 10), 0);
+
+      return new Date() > fechaEvento;
+    } catch (e) {
+      return false;
+    }
   };
 
   // HANDLERS PARA ABRIR MODALES
@@ -339,6 +372,7 @@ export default function SolicitudesAlquiAmigoScreen() {
       case 'aceptada': colorFondo = '#28A745'; colorTexto = '#FFF'; texto = 'Aceptada'; break;
       case 'rechazada': colorFondo = '#DC3545'; colorTexto = '#FFF'; texto = 'Rechazada'; break;
       case 'concluida': colorFondo = '#6C757D'; colorTexto = '#FFF'; texto = 'Concluida'; break;
+      case 'expirada': colorFondo = '#795548'; colorTexto = '#FFF'; texto = 'Expirada'; break;
     }
     return <View style={[styles.badge, { backgroundColor: colorFondo }]}><Text style={[styles.badgeText, { color: colorTexto }]} allowFontScaling={false}>{texto}</Text></View>;
   };

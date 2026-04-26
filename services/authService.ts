@@ -47,6 +47,8 @@ import { sendPasswordResetEmail } from 'firebase/auth';
     tarifa?: string;
     disponibilidadHoraria?: any;
     fotoURL?: string;
+    ciAnversoURI?: string;
+    ciReversoURI?: string;
   }
   
   export interface LoginResult {
@@ -76,7 +78,22 @@ const subirImagenPerfil = async (uri: string, uid: string) => {
     console.error("Error subiendo imagen:", error);
     throw new Error("No se pudo subir la imagen de perfil.");
   }
-};  
+};
+
+// --- FUNCIÓN PARA SUBIR IMAGEN DE CI ---
+const subirImagenCI = async (uri: string, uid: string, tipo: 'anverso' | 'reverso') => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const storageRef = ref(storage, `ci/${uid}/${tipo}`);
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    console.error(`Error subiendo CI ${tipo}:`, error);
+    throw new Error(`No se pudo subir la imagen del CI (${tipo}).`);
+  }
+};
 
 /**
  * Registra un nuevo usuario en Firebase Authentication, Storage y Firestore
@@ -92,10 +109,20 @@ export const registerUser = async (data: RegisterData) => {
     );
     const user = userCredential.user;
 
-    // 2. Subir imagen (Si el usuario seleccionó una)
+    // 2. Subir imagen de perfil (Si el usuario seleccionó una)
     let fotoURLPublica = '';
     if (data.fotoURL) {
       fotoURLPublica = await subirImagenPerfil(data.fotoURL, user.uid);
+    }
+
+    // 2.1 Subir imágenes de CI (anverso y reverso)
+    let ciAnversoURL = '';
+    let ciReversoURL = '';
+    if (data.ciAnversoURI) {
+      ciAnversoURL = await subirImagenCI(data.ciAnversoURI, user.uid, 'anverso');
+    }
+    if (data.ciReversoURI) {
+      ciReversoURL = await subirImagenCI(data.ciReversoURI, user.uid, 'reverso');
     }
 
     // 3. Crear documento en colección 'usuarios' (datos base)
@@ -110,6 +137,8 @@ export const registerUser = async (data: RegisterData) => {
       correo: data.email,
       contraseña: '', // No guardamos contraseña en Firestore (Firebase Auth la maneja)
       fotografia: fotoURLPublica,
+      ci_anverso_url: ciAnversoURL,
+      ci_reverso_url: ciReversoURL,
       nro_telefonico: data.telefono,
       descripcion: data.descripcion || '',
       intereses: data.intereses || '',

@@ -14,6 +14,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { getUserData } from '../../services/authService';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 
 const { width, height } = Dimensions.get('window');
@@ -29,15 +31,26 @@ export default function DetalleUsuarioScreen() {
   const [usuario, setUsuario] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalCIVisible, setModalCIVisible] = useState(false);
+  const [ciImagenSeleccionada, setCiImagenSeleccionada] = useState<string>('');
+  const [ciAnversoURL, setCiAnversoURL] = useState<string>('');
+  const [ciReversoURL, setCiReversoURL] = useState<string>('');
 
 // EFECTO PARA CARGAR DATOS FRESCOS
 useEffect(() => {
   const cargarDatosUsuario = async () => {
     if (uid && userType) {
       try {
-        // Reutilizamos el servicio de authService
         const data = await getUserData(uid as string, userType as any);
         setUsuario(data);
+
+        // Cargar URLs de CI directamente de Firestore
+        const usuarioDoc = await getDoc(doc(db, 'usuarios', uid as string));
+        if (usuarioDoc.exists()) {
+          const rawData = usuarioDoc.data();
+          setCiAnversoURL(rawData.ci_anverso_url || '');
+          setCiReversoURL(rawData.ci_reverso_url || '');
+        }
       } catch (error) {
         console.error("Error cargando detalle:", error);
       }
@@ -193,6 +206,40 @@ if (!usuario) {
           </>
         )}
 
+        {/* DOCUMENTO DE IDENTIDAD (CI) */}
+        {(ciAnversoURL || ciReversoURL) && (
+          <>
+            <Text style={styles.sectionLabel}>Documento de Identidad</Text>
+            
+            {ciAnversoURL ? (
+              <View style={styles.ciContainer}>
+                <Text style={styles.ciLabel}>CI - Anverso (Frente)</Text>
+                <TouchableOpacity onPress={() => { setCiImagenSeleccionada(ciAnversoURL); setModalCIVisible(true); }}>
+                  <Image source={{ uri: ciAnversoURL }} style={styles.ciImage} resizeMode="cover" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {ciReversoURL ? (
+              <View style={styles.ciContainer}>
+                <Text style={styles.ciLabel}>CI - Reverso (Dorso)</Text>
+                <TouchableOpacity onPress={() => { setCiImagenSeleccionada(ciReversoURL); setModalCIVisible(true); }}>
+                  <Image source={{ uri: ciReversoURL }} style={styles.ciImage} resizeMode="cover" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </>
+        )}
+
+        {!ciAnversoURL && !ciReversoURL && (
+          <>
+            <Text style={styles.sectionLabel}>Documento de Identidad</Text>
+            <View style={styles.valueBoxMulti}>
+              <Text style={styles.valueText}>No se proporcionaron imágenes del CI.</Text>
+            </View>
+          </>
+        )}
+
       </ScrollView>
 
       {/* MODAL PARA VER LA FOTO EN AMPLIO */}
@@ -206,6 +253,18 @@ if (!usuario) {
           ) : (
             <Feather name="user" size={100} color="#FFF" />
           )}
+        </View>
+      </Modal>
+
+      {/* MODAL PARA VER CI EN PANTALLA COMPLETA */}
+      <Modal visible={modalCIVisible} transparent={true} animationType="fade">
+        <View style={styles.modalBackground}>
+          <TouchableOpacity style={styles.closeModal} onPress={() => setModalCIVisible(false)}>
+            <Feather name="x" size={30} color="#FFF" />
+          </TouchableOpacity>
+          {ciImagenSeleccionada ? (
+            <Image source={{ uri: ciImagenSeleccionada }} style={styles.fullImage} resizeMode="contain" />
+          ) : null}
         </View>
       </Modal>
     </View>
@@ -263,5 +322,10 @@ const styles = StyleSheet.create({
   // MODAL
   modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
   closeModal: { position: 'absolute', top: 50, right: 20, padding: 10 },
-  fullImage: { width: width, height: height * 0.7 }
+  fullImage: { width: width, height: height * 0.7 },
+
+  // CI (Documento de Identidad)
+  ciContainer: { marginBottom: 15 },
+  ciLabel: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8 },
+  ciImage: { width: '100%', height: 200, borderRadius: 10, backgroundColor: '#F0F0F0' },
 });

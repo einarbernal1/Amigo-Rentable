@@ -3,7 +3,10 @@ import {
     addDoc, 
     Timestamp, 
     doc, 
-    getDoc 
+    getDoc,
+    query,
+    where,
+    getDocs
   } from 'firebase/firestore';
   import { db } from '../config/firebase';
   import { enviarNotificacionPush } from './notificationService';
@@ -23,6 +26,39 @@ import {
     estado_solicitud: 'pendiente' | 'aceptada' | 'rechazada';
     fecha_creacion: Timestamp;
   }
+
+  /**
+   * Verifica si ya existe una solicitud con los mismos datos
+   * (mismo cliente, amigo, fecha y hora) que no fue rechazada
+   */
+  export const verificarSolicitudDuplicada = async (
+    clienteId: string, 
+    amigoId: string, 
+    fecha: string, 
+    hora: string
+  ): Promise<{ duplicada: boolean }> => {
+    try {
+      const q = query(
+        collection(db, 'solicitudes'),
+        where('cliente_id', '==', clienteId),
+        where('amigo_id', '==', amigoId),
+        where('fecha_salida', '==', fecha),
+        where('hora_salida', '==', hora)
+      );
+      const snapshot = await getDocs(q);
+
+      // Filtrar: solo considerar duplicada si no está rechazada
+      const activas = snapshot.docs.filter(doc => {
+        const estado = doc.data().estado_solicitud;
+        return estado !== 'rechazada';
+      });
+
+      return { duplicada: activas.length > 0 };
+    } catch (error) {
+      console.error("Error verificando duplicados:", error);
+      return { duplicada: false };
+    }
+  };
   
   export const enviarSolicitudServicio = async (datos: NuevaSolicitud) => {
     try {

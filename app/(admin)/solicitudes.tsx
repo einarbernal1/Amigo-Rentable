@@ -59,6 +59,9 @@ const RechazoModal = ({ visible, nombre, onConfirm, onCancel, procesando, motivo
     'Fecha de nacimiento no concuerda con la foto/cédula',
     'Información general sospechosa o incompleta',
     'Número de teléfono no válido',
+    'El CI no coincide con los datos registrados',
+    'Documento de identidad no válido',
+    'Imagen del CI poco clara o ilegible',
   ];
 
   return (

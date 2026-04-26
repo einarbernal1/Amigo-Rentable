@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase';
 import { getUserData } from '../../services/authService';
 
@@ -57,13 +57,15 @@ interface SolicitudVisual {
   fotoAmigo: string;
   telefonoAmigo: string; 
   ratingAmigo: number;
+  interesesAmigo: string;
   lugar: string;
   fecha: string;
   hora: string;
   duracion: number;
-  estado: 'pendiente' | 'aceptada' | 'rechazada' | 'concluida';
+  estado: 'pendiente' | 'aceptada' | 'rechazada' | 'concluida' | 'expirada';
   yaCalificada: boolean; 
-  motivosRechazo?: string[]; // NUEVO CAMPO
+  motivosRechazo?: string[];
+  detalles?: string;
 }
 
 export default function SolicitudesScreen() {
@@ -77,6 +79,8 @@ export default function SolicitudesScreen() {
   // Estados Modal
   const [modalMotivosVisible, setModalMotivosVisible] = useState(false);
   const [motivosSeleccionados, setMotivosSeleccionados] = useState<string[]>([]);
+  const [modalDetallesVisible, setModalDetallesVisible] = useState(false);
+  const [solicitudDetalle, setSolicitudDetalle] = useState<SolicitudVisual | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,7 +132,8 @@ export default function SolicitudesScreen() {
           let nombreAmigo = 'Usuario Desconocido';
           let fotoAmigo = '';
           let telefonoAmigo = '';
-          let ratingAmigo = 0;    
+          let ratingAmigo = 0;
+          let interesesAmigo = '';
 
           // Compatibilidad: usa amigo_id o alqui_amigo_id
           const amigoId = data.amigo_id || data.alqui_amigo_id;
@@ -141,6 +146,7 @@ export default function SolicitudesScreen() {
               nombreAmigo = `${uData.nombres} ${uData.apellidos || ''}`.trim();
               fotoAmigo = uData.fotografia || '';
               telefonoAmigo = uData.nro_telefonico || '';
+              interesesAmigo = uData.intereses || '';
             }
             // Obtener rating de amigos
             const amigoDoc = await getDoc(doc(db, 'amigos', amigoId));
@@ -153,6 +159,18 @@ export default function SolicitudesScreen() {
           }
 
           let estadoFinal = data.estado_solicitud; 
+
+          // Verificar si la solicitud pendiente ya expiró
+          if (estadoFinal === 'pendiente') {
+            const yaExpiro = verificarSiExpiro(data.fecha_salida, data.hora_salida);
+            if (yaExpiro) {
+              estadoFinal = 'expirada';
+              // Actualizar en Firestore
+              try {
+                await updateDoc(doc(db, 'solicitudes', solicitudId), { estado_solicitud: 'expirada' });
+              } catch (e) { console.error('Error actualizando expirada:', e); }
+            }
+          }
 
           if (estadoFinal === 'aceptada') {
             const esConcluida = verificarSiConcluyo(data.fecha_salida, data.hora_salida, data.duracion);
@@ -167,14 +185,16 @@ export default function SolicitudesScreen() {
             nombreAmigo,
             fotoAmigo,
             telefonoAmigo, 
-            ratingAmigo,   
+            ratingAmigo,
+            interesesAmigo,
             lugar: data.lugar_asistir,
             fecha: data.fecha_salida, 
             hora: data.hora_salida,   
             duracion: data.duracion,
             estado: estadoFinal,
             yaCalificada: data.estado_calificacion || false,
-            motivosRechazo: data.motivos_rechazo || []
+            motivosRechazo: data.motivos_rechazo || [],
+            detalles: data.detalles_de_la_salida || ''
           });
         })
       );
@@ -211,6 +231,25 @@ export default function SolicitudesScreen() {
     }
   };
 
+  const verificarSiExpiro = (fechaStr: string, horaStr: string) => {
+    try {
+      let [time, modifier] = horaStr.split(' ');
+      let [hours, minutes] = time.split(':');
+      let hoursNum = parseInt(hours, 10);
+      if (hoursNum === 12) hoursNum = 0;
+      if (modifier === 'PM' || modifier === 'pm' || modifier === 'p.m.') hoursNum += 12;
+
+      const fechaEvento = new Date();
+      const [year, month, day] = fechaStr.split('-').map(Number);
+      fechaEvento.setFullYear(year, month - 1, day);
+      fechaEvento.setHours(hoursNum, parseInt(minutes, 10), 0);
+
+      return new Date() > fechaEvento;
+    } catch (e) {
+      return false;
+    }
+  };
+
   const irAPerfil = () => router.push('/Perfil_usuario/perfil');
   const irACalificar = (solicitud: SolicitudVisual) => {
     router.push({ pathname: '/Funciones_usuario_cliente/calificar_experiencia', params: { solicitudId: solicitud.id } });
@@ -221,6 +260,11 @@ export default function SolicitudesScreen() {
     setModalMotivosVisible(true);
   };
 
+  const abrirDetalles = (solicitud: SolicitudVisual) => {
+    setSolicitudDetalle(solicitud);
+    setModalDetallesVisible(true);
+  };
+
   const renderBadgeEstado = (estado: string) => {
     let colorFondo = '#EEE', colorTexto = '#555', texto = estado.charAt(0).toUpperCase() + estado.slice(1);
     switch (estado) {
@@ -228,6 +272,7 @@ export default function SolicitudesScreen() {
       case 'aceptada': colorFondo = '#25D366'; colorTexto = '#FFF'; break;
       case 'rechazada': colorFondo = '#DC3545'; colorTexto = '#FFF'; break;
       case 'concluida': colorFondo = '#E0E0E0'; colorTexto = '#777'; break;
+      case 'expirada': colorFondo = '#795548'; colorTexto = '#FFF'; break;
     }
     return <View style={[styles.badge, { backgroundColor: colorFondo }]}><Text style={[styles.badgeText, { color: colorTexto }]} allowFontScaling={false}>{texto}</Text></View>;
   };
@@ -265,6 +310,14 @@ export default function SolicitudesScreen() {
         
         {item.estado === 'concluida' && item.yaCalificada && (
           <Text style={styles.textoCalificada} allowFontScaling={false}>✓ Experiencia calificada</Text>
+        )}
+
+        {/* BOTÓN VER DETALLES (Solo si aceptada) */}
+        {item.estado === 'aceptada' && (
+          <TouchableOpacity style={styles.botonVerDetalles} onPress={() => abrirDetalles(item)}>
+            <Feather name="eye" size={16} color="#008FD9" style={{marginRight: 5}} />
+            <Text style={styles.textoBotonVerDetalles} allowFontScaling={false}>Ver Detalles</Text>
+          </TouchableOpacity>
         )}
 
         {/* NUEVO BOTON PARA VER MOTIVOS (Solo si es rechazada) */}
@@ -324,6 +377,77 @@ export default function SolicitudesScreen() {
         motivos={motivosSeleccionados} 
         onClose={() => setModalMotivosVisible(false)} 
       />
+
+      {/* Modal de Detalles de Solicitud Aceptada */}
+      <Modal transparent visible={modalDetallesVisible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContentDetalles}>
+            <Text style={styles.modalTitle} allowFontScaling={false}>Detalles de la Solicitud</Text>
+            
+            {solicitudDetalle && (
+              <View style={{ width: '100%', alignItems: 'center' }}>
+                {/* Foto y nombre del Alqui-Amigo */}
+                <View style={styles.detalleAvatarContainer}>
+                  <View style={styles.detalleAvatarBorder}>
+                    {solicitudDetalle.fotoAmigo ? (
+                      <Image source={{ uri: solicitudDetalle.fotoAmigo }} style={styles.detalleAvatar} />
+                    ) : (
+                      <Feather name="user" size={36} color="#555" />
+                    )}
+                  </View>
+                  <Text style={styles.detalleNombreAmigo} allowFontScaling={false}>{solicitudDetalle.nombreAmigo}</Text>
+                </View>
+
+                {/* Info de la solicitud */}
+                <View style={{ width: '100%' }}>
+                  <View style={styles.detalleRow}>
+                    <Feather name="calendar" size={16} color="#666" />
+                    <Text style={styles.detalleLabel}>Fecha:</Text>
+                    <Text style={styles.detalleValue}>{solicitudDetalle.fecha}</Text>
+                  </View>
+                  <View style={styles.detalleRow}>
+                    <Feather name="clock" size={16} color="#666" />
+                    <Text style={styles.detalleLabel}>Hora:</Text>
+                    <Text style={styles.detalleValue}>{solicitudDetalle.hora}</Text>
+                  </View>
+                  <View style={styles.detalleRow}>
+                    <Feather name="map-pin" size={16} color="#666" />
+                    <Text style={styles.detalleLabel}>Lugar:</Text>
+                    <Text style={styles.detalleValue}>{solicitudDetalle.lugar}</Text>
+                  </View>
+                  <View style={styles.detalleRow}>
+                    <Feather name="watch" size={16} color="#666" />
+                    <Text style={styles.detalleLabel}>Duración:</Text>
+                    <Text style={styles.detalleValue}>{solicitudDetalle.duracion} horas</Text>
+                  </View>
+
+                  {/* Hobbies e Intereses */}
+                  <View style={styles.detalleSeccion}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                      <Feather name="heart" size={16} color="#E91E63" />
+                      <Text style={[styles.detalleLabel, { color: '#333', fontWeight: 'bold' }]}>Hobbies e Intereses:</Text>
+                    </View>
+                    <Text style={styles.detalleInteresesTexto}>
+                      {solicitudDetalle.interesesAmigo || 'No especificados.'}
+                    </Text>
+                  </View>
+
+                  {solicitudDetalle.detalles ? (
+                    <View style={styles.detalleDescripcion}>
+                      <Text style={styles.detalleLabel}>Detalles de la salida:</Text>
+                      <Text style={styles.detalleDescTexto}>{solicitudDetalle.detalles}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.btnConfirm, { backgroundColor: '#25D366', width: '100%', marginTop: 15 }]} onPress={() => setModalDetallesVisible(false)}>
+              <Text style={styles.btnConfirmText} allowFontScaling={false}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -363,9 +487,14 @@ const styles = StyleSheet.create({
   btnVerMotivo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF5F5', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#DC3545', alignSelf: 'flex-start' },
   txtVerMotivo: { color: '#DC3545', fontSize: 13, fontWeight: 'bold' },
 
+  // Boton Ver Detalles (Aceptada)
+  botonVerDetalles: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F0FF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#008FD9', alignSelf: 'flex-start' },
+  textoBotonVerDetalles: { color: '#008FD9', fontSize: 13, fontWeight: 'bold' },
+
   // Estilos Modales
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContentMotivos: { width: '85%', backgroundColor: '#FFF', borderRadius: 15, padding: 25, alignItems: 'center' },
+  modalContentDetalles: { width: '90%', backgroundColor: '#FFF', borderRadius: 15, padding: 25, alignItems: 'center' },
   modalIcon: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#333' },
   modalText: { textAlign: 'center', color: '#666', marginBottom: 20 },
@@ -373,4 +502,17 @@ const styles = StyleSheet.create({
   motivoItemText: { flex: 1, fontSize: 15, color: '#444' },
   btnConfirm: { padding: 12, borderRadius: 10, alignItems: 'center' },
   btnConfirmText: { fontWeight: 'bold', color: '#FFF' },
+
+  // Detalles Modal
+  detalleAvatarContainer: { alignItems: 'center', marginBottom: 18 },
+  detalleAvatarBorder: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#25D366', justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5', overflow: 'hidden', marginBottom: 8 },
+  detalleAvatar: { width: '100%', height: '100%' },
+  detalleNombreAmigo: { fontSize: 18, fontWeight: 'bold', color: '#000', textAlign: 'center' },
+  detalleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  detalleLabel: { fontSize: 14, color: '#666', fontWeight: '600', marginLeft: 8, marginRight: 5 },
+  detalleValue: { fontSize: 14, color: '#000', fontWeight: '500', flex: 1 },
+  detalleSeccion: { marginTop: 8, marginBottom: 10, backgroundColor: '#F9F9F9', borderRadius: 10, padding: 12 },
+  detalleInteresesTexto: { fontSize: 14, color: '#444', lineHeight: 20, marginLeft: 24 },
+  detalleDescripcion: { marginTop: 5, marginBottom: 10 },
+  detalleDescTexto: { fontSize: 14, color: '#444', marginTop: 4, lineHeight: 20 },
 });

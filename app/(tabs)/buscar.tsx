@@ -360,6 +360,9 @@ export default function BuscarAlquiAmigos() {
         </View>
       </View>
 
+      {/* Label de filtros */}
+      <Text style={styles.textoBusquedaFiltros}>Búsqueda por filtros</Text>
+
       {/* Botones de filtro */}
       <View style={{ height: 60 }}>
         <ScrollView
@@ -511,6 +514,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     alignItems: 'center',
+  },
+  textoBusquedaFiltros: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#068FD9',
+    paddingHorizontal: 20,
+    marginBottom: 2,
   },
   botonFiltro: {
     flexDirection: 'row',
