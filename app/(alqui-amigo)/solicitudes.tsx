@@ -384,12 +384,12 @@ export default function SolicitudesAlquiAmigoScreen() {
           <View style={styles.avatarBorder}>
             {item.fotoCliente ? <Image source={{ uri: item.fotoCliente }} style={styles.avatar} /> : <Feather name="user" size={24} color="#555" />}
           </View>
-          <View>
-            <Text style={styles.userName} allowFontScaling={false}>{item.nombreCliente}</Text>
+          <View style={styles.userInfoText}>
+            <Text style={styles.userName} numberOfLines={2} allowFontScaling={false}>{item.nombreCliente}</Text>
             <Text style={styles.userPhone} allowFontScaling={false}>{item.telefonoCliente ? `+591 ${item.telefonoCliente}` : 'Sin teléfono'}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.btnVerDetalles} onPress={() => router.push({ pathname: '/(alqui-amigo)/detalle_solicitud', params: { id: item.id } })}>
+        <TouchableOpacity style={styles.btnVerDetalles} onPress={() => router.navigate({ pathname: '/(alqui-amigo)/detalle_solicitud', params: { id: item.id } })}>
           <Text style={styles.txtVerDetalles} allowFontScaling={false}>Ver Detalles</Text>
         </TouchableOpacity>
       </View>
@@ -478,7 +478,8 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', marginTop: 20, color: '#888' },
   card: { backgroundColor: '#FFF', borderRadius: 15, padding: 15, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  userInfo: { flexDirection: 'row', alignItems: 'center' },
+  userInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
+  userInfoText: { flex: 1 },
   avatarBorder: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 1, borderColor: '#DDD', justifyContent: 'center', alignItems: 'center', marginRight: 10, overflow: 'hidden' },
   avatar: { width: '100%', height: '100%' },
   userName: { fontSize: 16, fontWeight: 'bold', color: '#000' },

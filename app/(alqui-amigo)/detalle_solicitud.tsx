@@ -1,4 +1,4 @@
-import React, { useState,useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   StatusBar,
   Modal,
   Dimensions,
-  ActivityIndicator
+  ActivityIndicator,
+  BackHandler
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -27,7 +28,22 @@ export default function DetalleSolicitudScreen() {
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
 
+  // Interceptar botón físico atrás de Android
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.navigate('/(alqui-amigo)/solicitudes');
+        return true;
+      });
+      return () => subscription.remove();
+    }, [])
+  );
+
   useEffect(() => {
+    setDatos(null);
+    setCargando(true);
+    setDatos(null);
+    setCargando(true);
     const cargarDetallesCompletos = async () => {
       if (!id) return;
 
@@ -123,7 +139,7 @@ export default function DetalleSolicitudScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/(alqui-amigo)/solicitudes")} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.navigate('/(alqui-amigo)/solicitudes')} style={styles.backBtn}>
           <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Detalles de la solicitud</Text>

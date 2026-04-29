@@ -284,7 +284,9 @@ export default function SolicitudesScreen() {
           <View style={styles.avatarBorder}>
             {item.fotoAmigo ? <Image source={{ uri: item.fotoAmigo }} style={styles.avatar} /> : <Feather name="user" size={24} color="#555" />}
           </View>
-          <Text style={styles.userName} numberOfLines={1} allowFontScaling={false}>{item.nombreAmigo}</Text>
+          <View style={styles.userNameContainer}>
+            <Text style={styles.userName} numberOfLines={2} allowFontScaling={false}>{item.nombreAmigo}</Text>
+          </View>
         </View>
         {renderBadgeEstado(item.estado)}
       </View>
@@ -470,7 +472,8 @@ const styles = StyleSheet.create({
   userInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   avatarBorder: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#000', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF', overflow: 'hidden', marginRight: 10 },
   avatar: { width: '100%', height: '100%' },
-  userName: { fontSize: 17, fontWeight: 'bold', color: '#000', flex: 1, flexShrink: 1 },
+  userNameContainer: { flex: 1, flexShrink: 1 },
+  userName: { fontSize: 17, fontWeight: 'bold', color: '#000' },
   badge: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 20, flexShrink: 0 },
   badgeText: { fontSize: 13, fontWeight: 'bold' },
   cardBody: { marginLeft: 60 },
