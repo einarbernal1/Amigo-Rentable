@@ -9,16 +9,22 @@ import {
   StatusBar,
   Image,
   ActivityIndicator,
-  Modal, // Importamos Modal nativo
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { auth } from '../../config/firebase';
 import { getUserData } from '../../services/authService';
-import { enviarSolicitudServicio, NuevaSolicitud, verificarSolicitudDuplicada } from '../../services/solicitudesService';
+import {
+  enviarSolicitudServicio,
+  NuevaSolicitud,
+  verificarSolicitudDuplicada,
+  verificarDisponibilidadHorario,     // ← NUEVO
+  verificarSolapamientoSolicitudes,   // ← NUEVO
+} from '../../services/solicitudesService';
 
-// --- 1. COMPONENTE MODAL PERSONALIZADO ---
+// --- COMPONENTE MODAL PERSONALIZADO ---
 interface ModalMensajeProps {
   visible: boolean;
   titulo: string;
@@ -28,7 +34,6 @@ interface ModalMensajeProps {
 }
 
 const ModalMensaje: React.FC<ModalMensajeProps> = ({ visible, titulo, mensaje, tipo, onClose }) => {
-  // Definimos colores: Azul para éxito, Rojo para error
   const colorFondo = tipo === 'exito' ? '#008FD9' : '#DC3545';
 
   return (
@@ -40,21 +45,17 @@ const ModalMensaje: React.FC<ModalMensajeProps> = ({ visible, titulo, mensaje, t
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
-          {/* Icono superior con el color dinámico */}
           <View style={[styles.modalIconContainer, { backgroundColor: colorFondo }]}>
-            <Feather 
-              name={tipo === 'exito' ? 'check' : 'x'} 
-              size={32} 
-              color="#FFFFFF" 
+            <Feather
+              name={tipo === 'exito' ? 'check' : 'x'}
+              size={32}
+              color="#FFFFFF"
             />
           </View>
-          
           <Text style={styles.modalTitulo}>{titulo}</Text>
           <Text style={styles.modalMensaje}>{mensaje}</Text>
-          
-          {/* Botón con el color dinámico */}
-          <TouchableOpacity 
-            style={[styles.modalBoton, { backgroundColor: colorFondo }]} 
+          <TouchableOpacity
+            style={[styles.modalBoton, { backgroundColor: colorFondo }]}
             onPress={onClose}
           >
             <Text style={styles.modalBotonTexto}>Aceptar</Text>
@@ -68,7 +69,7 @@ const ModalMensaje: React.FC<ModalMensajeProps> = ({ visible, titulo, mensaje, t
 export default function EnviarSolicitudScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  
+
   const { uid } = params;
   const [alquiAmigo, setAlquiAmigo] = useState<any>(null);
 
@@ -78,20 +79,20 @@ export default function EnviarSolicitudScreen() {
   const [duracion, setDuracion] = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [mensaje, setMensaje] = useState('');
-  
+
   const [mostrarFecha, setMostrarFecha] = useState(false);
   const [mostrarHora, setMostrarHora] = useState(false);
 
   const [cargando, setCargando] = useState(false);
   const [clienteData, setClienteData] = useState<any>(null);
 
-  // --- 2. ESTADOS DEL MODAL ---
+  // Estados del modal
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDatos, setModalDatos] = useState({
     titulo: '',
     mensaje: '',
-    tipo: 'exito' as 'exito' | 'error', // Tipo por defecto
-    accion: () => {} // Acción al cerrar (opcional)
+    tipo: 'exito' as 'exito' | 'error',
+    accion: () => {},
   });
 
   useEffect(() => {
@@ -99,22 +100,19 @@ export default function EnviarSolicitudScreen() {
     cargarDatosAlquiAmigoDestino();
   }, []);
 
-  // Función auxiliar para mostrar el modal
-  const mostrarModal = (titulo: string, mensaje: string, tipo: 'exito' | 'error', accion?: () => void) => {
-    setModalDatos({
-      titulo,
-      mensaje,
-      tipo,
-      accion: accion || (() => {})
-    });
+  const mostrarModal = (
+    titulo: string,
+    mensaje: string,
+    tipo: 'exito' | 'error',
+    accion?: () => void
+  ) => {
+    setModalDatos({ titulo, mensaje, tipo, accion: accion || (() => {}) });
     setModalVisible(true);
   };
 
   const cerrarModal = () => {
     setModalVisible(false);
-    if (modalDatos.accion) {
-      modalDatos.accion();
-    }
+    if (modalDatos.accion) modalDatos.accion();
   };
 
   const cargarDatosCliente = async () => {
@@ -127,131 +125,42 @@ export default function EnviarSolicitudScreen() {
 
   const cargarDatosAlquiAmigoDestino = async () => {
     if (uid) {
-        // Descargamos datos frescos del Alqui-Amigo
-        const datos = await getUserData(uid as string, 'alqui-amigo');
-        setAlquiAmigo(datos);
+      const datos = await getUserData(uid as string, 'alqui-amigo');
+      setAlquiAmigo(datos);
     }
   };
 
-  const manejarEnvio = async () => {
-    // Validación de campos con Modal Rojo
-    if (!ubicacion || !mensaje || !duracion) {
-      mostrarModal(
-        "Campos incompletos", 
-        "Por favor asegúrate de llenar la ubicación, duración y mensaje para el Alqui-Amigo.", 
-        'error'
-      );
-      return;
-    }
-
-    // Validación: si la fecha es hoy, la hora no puede ser anterior o igual a la actual
-    const ahora = new Date();
-    const esHoy =
-      fecha.getFullYear() === ahora.getFullYear() &&
-      fecha.getMonth() === ahora.getMonth() &&
-      fecha.getDate() === ahora.getDate();
-
-    if (esHoy) {
-      const momentoSeleccionado = new Date();
-      momentoSeleccionado.setHours(hora.getHours(), hora.getMinutes(), 0, 0);
-      if (momentoSeleccionado <= ahora) {
-        mostrarModal(
-          "Hora inválida",
-          "La hora seleccionada ya pasó. Por favor elige una hora futura para hoy.",
-          'error'
-        );
-        return;
-      }
-    }
-
-    if (!clienteData) {
-      mostrarModal("Error de Usuario", "No pudimos identificar tu sesión. Intenta reconectar.", 'error');
-      return;
-    }
-
-    setCargando(true);
-
-    const fechaStr = fecha.toISOString().split('T')[0];
-    const horaStr = formatoHora(hora);
-
-    // Verificar solicitud duplicada
-    const { duplicada } = await verificarSolicitudDuplicada(
-      auth.currentUser?.uid || '',
-      alquiAmigo.uid,
-      fechaStr,
-      horaStr
-    );
-
-    if (duplicada) {
-      setCargando(false);
-      mostrarModal(
-        "Solicitud Duplicada",
-        "Ya existe una solicitud con la misma fecha, hora y alqui-amigo. Revisa tus solicitudes enviadas.",
-        'error'
-      );
-      return;
-    }
-
-    const nuevaSolicitud: NuevaSolicitud = {
-      cliente_id: auth.currentUser?.uid || '',
-      amigo_id: alquiAmigo.uid,
-      nombre_solicitante: clienteData.nombres,
-      fotografia_solicitante: clienteData.fotoURL || '',
-      informacion_general_solicitante: `Edad: ${calcularEdad(clienteData.fechaNacimiento)} años`,
-      fecha_salida: fechaStr,
-      hora_salida: horaStr,
-      duracion: parseInt(duracion),
-      lugar_asistir: ubicacion,
-      detalles_de_la_salida: mensaje,
-      estado_solicitud: 'pendiente',
-      fecha_creacion: null as any
-    };
-
-    const resultado = await enviarSolicitudServicio(nuevaSolicitud);
-
-    setCargando(false);
-
-    if (resultado.success) {
-      // Éxito con Modal Azul
-      mostrarModal(
-        "¡Solicitud Enviada!",
-        "Tu solicitud ha sido registrada exitosamente. Puedes ver el estado en tu historial.",
-        'exito',
-        () => router.push('/(tabs)/buscar') // Al cerrar el modal, nos vamos al inicio
-      );
-    } else {
-      // Error de servidor con Modal Rojo
-      mostrarModal("Error", "Hubo un problema al conectar con el servidor. Intenta más tarde.", 'error');
-    }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Construye "YYYY-MM-DD" usando la fecha LOCAL del dispositivo.
+  // NUNCA usar toISOString() porque convierte a UTC y en Bolivia (UTC-4)
+  // eso puede adelantar el día cuando la hora local supera las 8 PM.
+  // ─────────────────────────────────────────────────────────────────────────
+  const formatoFechaISO = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
-  const calcularEdad = (fecha: string) => {
-    if(!fecha) return '?';
-    const hoy = new Date();
-    const nacimiento = new Date(fecha);
-    let edad = hoy.getFullYear() - nacimiento.getFullYear();
-    const m = hoy.getMonth() - nacimiento.getMonth();
-    if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
-    return edad;
+  // Convierte hora 12h "3:30 PM" → "HH:MM" en 24h para las comparaciones
+  const formatoHora24 = (date: Date): string => {
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
   };
 
-  // --- NUEVA FUNCIÓN DE FORMATO HORA (12H Manual) ---
-  const formatoHora = (date: Date) => {
+  // Formato de visualización 12h para mostrar al usuario
+  const formatoHora = (date: Date): string => {
     let hours = date.getHours();
     const minutes = date.getMinutes();
     const ampm = hours >= 12 ? 'PM' : 'AM';
-    
     hours = hours % 12;
-    hours = hours ? hours : 12; // la hora '0' debe ser '12'
-    
+    hours = hours ? hours : 12;
     const strMinutes = minutes < 10 ? '0' + minutes : minutes;
-    
     return `${hours}:${strMinutes} ${ampm}`;
   };
 
-  const formatoFecha = (date: Date) => {
-    return date.toLocaleDateString();
-  };
+  const formatoFecha = (date: Date): string => date.toLocaleDateString();
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setMostrarFecha(false);
@@ -263,6 +172,148 @@ export default function EnviarSolicitudScreen() {
     if (selectedDate) setHora(selectedDate);
   };
 
+  const calcularEdad = (fechaNac: string): string | number => {
+    if (!fechaNac) return '?';
+    const hoy = new Date();
+    const nacimiento = new Date(fechaNac);
+    let edad = hoy.getFullYear() - nacimiento.getFullYear();
+    const m = hoy.getMonth() - nacimiento.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
+    return edad;
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ENVÍO CON VALIDACIONES
+  // ─────────────────────────────────────────────────────────────────────────
+  const manejarEnvio = async () => {
+    // 1. Campos requeridos
+    if (!ubicacion || !mensaje || !duracion) {
+      mostrarModal(
+        'Campos incompletos',
+        'Por favor asegúrate de llenar la ubicación, duración y mensaje para el Alqui-Amigo.',
+        'error'
+      );
+      return;
+    }
+
+    // 2. Si es hoy, la hora no puede ser pasada
+    const ahora = new Date();
+    const esHoy =
+      fecha.getFullYear() === ahora.getFullYear() &&
+      fecha.getMonth() === ahora.getMonth() &&
+      fecha.getDate() === ahora.getDate();
+
+    if (esHoy) {
+      const momentoSeleccionado = new Date();
+      momentoSeleccionado.setHours(hora.getHours(), hora.getMinutes(), 0, 0);
+      if (momentoSeleccionado <= ahora) {
+        mostrarModal(
+          'Hora inválida',
+          'La hora seleccionada ya pasó. Por favor elige una hora futura para hoy.',
+          'error'
+        );
+        return;
+      }
+    }
+
+    if (!clienteData) {
+      mostrarModal('Error de Usuario', 'No pudimos identificar tu sesión. Intenta reconectar.', 'error');
+      return;
+    }
+
+    setCargando(true);
+
+    // Preparar strings de fecha y hora una sola vez
+    const fechaStr = formatoFechaISO(fecha); // "YYYY-MM-DD" en hora local, sin desfase UTC
+    const horaSalida24 = formatoHora24(hora);           // "HH:MM" para comparaciones
+    const horaSalidaStr = formatoHora(hora);            // "H:MM AM/PM" para guardar/mostrar
+    const duracionNum = parseInt(duracion, 10);
+
+    // ── VALIDACIÓN 1: Horario disponible del Alqui-Amigo ─────────────────
+    const { disponible, motivo: motivoDisp } = await verificarDisponibilidadHorario(
+      alquiAmigo.uid,
+      fechaStr,
+      horaSalida24,
+      duracionNum
+    );
+
+    if (!disponible) {
+      setCargando(false);
+      mostrarModal('⏰ Horario no disponible', motivoDisp ?? 'El horario seleccionado no está disponible.', 'error');
+      return;
+    }
+
+    // ── VALIDACIÓN 2: Solapamiento con solicitudes ya existentes ──────────
+    const { solapamiento, motivo: motivoSol } = await verificarSolapamientoSolicitudes(
+      alquiAmigo.uid,
+      fechaStr,
+      horaSalida24,
+      duracionNum
+    );
+
+    if (solapamiento) {
+      setCargando(false);
+      mostrarModal(
+        '📅 Horario ocupado',
+        motivoSol ?? 'El Alqui-Amigo ya tiene una reserva activa en ese horario.',
+        'error'
+      );
+      return;
+    }
+
+    // ── VALIDACIÓN 3: Solicitud duplicada exacta ──────────────────────────
+    const { duplicada } = await verificarSolicitudDuplicada(
+      auth.currentUser?.uid || '',
+      alquiAmigo.uid,
+      fechaStr,
+      horaSalidaStr
+    );
+
+    if (duplicada) {
+      setCargando(false);
+      mostrarModal(
+        'Solicitud Duplicada',
+        'Ya existe una solicitud con la misma fecha, hora y Alqui-Amigo. Revisa tus solicitudes enviadas.',
+        'error'
+      );
+      return;
+    }
+
+    // ── ENVIAR ────────────────────────────────────────────────────────────
+    const nuevaSolicitud: NuevaSolicitud = {
+      cliente_id: auth.currentUser?.uid || '',
+      amigo_id: alquiAmigo.uid,
+      nombre_solicitante: clienteData.nombres,
+      fotografia_solicitante: clienteData.fotoURL || '',
+      informacion_general_solicitante: `Edad: ${calcularEdad(clienteData.fechaNacimiento)} años`,
+      fecha_salida: fechaStr,
+      hora_salida: horaSalidaStr,   // se guarda en formato legible "3:30 PM"
+      duracion: duracionNum,
+      lugar_asistir: ubicacion,
+      detalles_de_la_salida: mensaje,
+      estado_solicitud: 'pendiente',
+      fecha_creacion: null as any,
+    };
+
+    const resultado = await enviarSolicitudServicio(nuevaSolicitud);
+
+    setCargando(false);
+
+    if (resultado.success) {
+      mostrarModal(
+        '¡Solicitud Enviada!',
+        'Tu solicitud ha sido registrada exitosamente. Puedes ver el estado en tu historial.',
+        'exito',
+        () => router.push('/(tabs)/buscar')
+      );
+    } else {
+      mostrarModal('Error', 'Hubo un problema al conectar con el servidor. Intenta más tarde.', 'error');
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -277,7 +328,7 @@ export default function EnviarSolicitudScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Tarjeta del Alqui-Amigo Destino */}
         <View style={styles.tarjetaDestino}>
           <View style={styles.avatarBorder}>
@@ -293,7 +344,7 @@ export default function EnviarSolicitudScreen() {
           </View>
         </View>
 
-        {/* Formulario */}
+        {/* Fecha */}
         <Text style={styles.labelInput}>Fecha</Text>
         <TouchableOpacity style={styles.inputSelect} onPress={() => setMostrarFecha(true)}>
           <Text style={styles.textoSelect}>{formatoFecha(fecha)}</Text>
@@ -309,23 +360,23 @@ export default function EnviarSolicitudScreen() {
           />
         )}
 
+        {/* Hora */}
         <Text style={styles.labelInput}>Hora</Text>
         <TouchableOpacity style={styles.inputSelect} onPress={() => setMostrarHora(true)}>
-          {/* Aquí se mostrará "03:30 PM" */}
           <Text style={styles.textoSelect}>{formatoHora(hora)}</Text>
           <Feather name="clock" size={20} color="#000" />
         </TouchableOpacity>
-        
         {mostrarHora && (
           <DateTimePicker
             value={hora}
             mode="time"
             display="default"
-            is24Hour={false} // <--- ESTO FUERZA EL RELOJ DE 12H EN ANDROID
+            is24Hour={false}
             onChange={onTimeChange}
           />
         )}
 
+        {/* Duración */}
         <Text style={styles.labelInput}>Duración (horas)</Text>
         <View style={styles.inputContainer}>
           <TextInput
@@ -338,6 +389,7 @@ export default function EnviarSolicitudScreen() {
           />
         </View>
 
+        {/* Ubicación */}
         <Text style={styles.labelInput}>Ubicación</Text>
         <View style={styles.inputContainer}>
           <TextInput
@@ -349,6 +401,7 @@ export default function EnviarSolicitudScreen() {
           />
         </View>
 
+        {/* Mensaje */}
         <Text style={styles.labelInput}>Mensaje / Propósito</Text>
         <View style={[styles.inputContainer, styles.textAreaContainer]}>
           <TextInput
@@ -363,8 +416,8 @@ export default function EnviarSolicitudScreen() {
           />
         </View>
 
-        <TouchableOpacity 
-          style={[styles.botonConfirmar, cargando && styles.botonDeshabilitado]} 
+        <TouchableOpacity
+          style={[styles.botonConfirmar, cargando && styles.botonDeshabilitado]}
           onPress={manejarEnvio}
           disabled={cargando}
         >
@@ -377,7 +430,7 @@ export default function EnviarSolicitudScreen() {
 
       </ScrollView>
 
-      {/* --- MODAL DE MENSAJES INTEGRADO --- */}
+      {/* Modal de mensajes */}
       <ModalMensaje
         visible={modalVisible}
         titulo={modalDatos.titulo}
@@ -506,7 +559,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  // --- ESTILOS DEL MODAL ---
+  // Estilos del modal (sin cambios)
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

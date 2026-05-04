@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
-  Platform
+  Platform,
+  BackHandler
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -75,6 +76,7 @@ export default function EditarPerfilScreen() {
 
   const [diasRegistrados, setDiasRegistrados] = useState<DiaKey[]>([]); // Días que existen en BD
   const [diasSeleccionados, setDiasSeleccionados] = useState<DiaKey[]>([]); // Días seleccionados para editar (Azul Oscuro)
+  const [diasNuevosAgregados, setDiasNuevosAgregados] = useState<DiaKey[]>([]); // Días nuevos añadidos en esta sesión
 
   // Inputs visuales
   const [inputInicio, setInputInicio] = useState('09:00');
@@ -89,11 +91,43 @@ export default function EditarPerfilScreen() {
 
   // Modal Info
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalInfo, setModalInfo] = useState({ title: '', msg: '', type: 'error' });
+  const [modalInfo, setModalInfo] = useState({ title: '', msg: '', type: 'error', redirigir: false });
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  // Modal Agregar Día
+  const [modalAgregarVisible, setModalAgregarVisible] = useState(false);
+  const [diaAgregar, setDiaAgregar] = useState<DiaKey | null>(null);
+  const [inicioAgregar, setInicioAgregar] = useState('09:00');
+  const [inicioPeriodoAgregar, setInicioPeriodoAgregar] = useState<'am'|'pm'>('am');
+  const [finAgregar, setFinAgregar] = useState('05:00');
+  const [finPeriodoAgregar, setFinPeriodoAgregar] = useState<'am'|'pm'>('pm');
+  const [mostrarPickerAgregar, setMostrarPickerAgregar] = useState(false);
+  const [tipoPickerAgregar, setTipoPickerAgregar] = useState<'inicio'|'fin'>('inicio');
+  const [horaTempAgregar, setHoraTempAgregar] = useState(new Date());
+
+  // Al entrar a la pantalla: resetear todo el estado y recargar datos frescos de Firebase
+  useFocusEffect(
+    useCallback(() => {
+      // Reset completo de estados de edición
+      setDiasSeleccionados([]);
+      setDiasNuevosAgregados([]);
+      setNuevaFotoURI('');
+      setInputInicio('09:00');
+      setPeriodoInicio('am');
+      setInputFin('05:00');
+      setPeriodoFin('pm');
+      setMapaHorarios({ lunes: null, martes: null, miercoles: null, jueves: null, viernes: null, sabado: null, domingo: null });
+      setDiasRegistrados([]);
+      setCargando(true);
+      cargarDatos();
+
+      // Interceptar botón físico atrás de Android
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.push('/(alqui-amigo)/perfil');
+        return true;
+      });
+      return () => subscription.remove();
+    }, [])
+  );
 
   const cargarDatos = async () => {
     try {
@@ -224,27 +258,69 @@ export default function EditarPerfilScreen() {
     setMostrarPicker(true);
   };
 
-  const onPickerChange = (event: any, selectedDate?: Date) => {
-    setMostrarPicker(Platform.OS === 'ios'); 
-    if (!selectedDate) return; 
+  // Convierte "H:MM" + periodo a minutos totales para comparar
+  const horaAMinutosLocal = (hora: string, periodo: string): number => {
+    const [hStr, mStr] = hora.split(':');
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (periodo === 'pm' && h !== 12) h += 12;
+    if (periodo === 'am' && h === 12) h = 0;
+    return h * 60 + m;
+  };
 
-    setHoraTemp(selectedDate); 
+  const onPickerChange = (event: any, selectedDate?: Date) => {
+    setMostrarPicker(Platform.OS === 'ios');
+    if (!selectedDate) return;
+
+    setHoraTemp(selectedDate);
 
     let h = selectedDate.getHours();
     const m = selectedDate.getMinutes();
     const nuevoPeriodo = h >= 12 ? 'pm' : 'am';
-    
+
     if (h > 12) h -= 12;
     if (h === 0) h = 12;
 
     const nuevaHoraStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 
+    // Validar coherencia: inicio debe ser anterior a fin
     if (tipoPicker === 'inicio') {
-        aplicarCambioASeleccionados('inicio', nuevaHoraStr);
-        aplicarCambioASeleccionados('inicioPeriodo', nuevoPeriodo);
+      const minutosNuevoInicio = horaAMinutosLocal(nuevaHoraStr, nuevoPeriodo);
+      const minutosFinActual   = horaAMinutosLocal(inputFin, periodoFin);
+      if (minutosNuevoInicio >= minutosFinActual) {
+        if (Platform.OS === 'android') setMostrarPicker(false);
+        setModalInfo({
+          title: 'Hora inválida',
+          msg: `La hora de inicio (${nuevaHoraStr} ${nuevoPeriodo.toUpperCase()}) debe ser anterior a la hora de fin (${inputFin} ${periodoFin.toUpperCase()}).`,
+          type: 'error',
+          redirigir: false
+        });
+        setModalVisible(true);
+        return;
+      }
     } else {
-        aplicarCambioASeleccionados('fin', nuevaHoraStr);
-        aplicarCambioASeleccionados('finPeriodo', nuevoPeriodo);
+      const minutosInicioActual = horaAMinutosLocal(inputInicio, periodoInicio);
+      const minutosNuevoFin     = horaAMinutosLocal(nuevaHoraStr, nuevoPeriodo);
+      if (minutosNuevoFin <= minutosInicioActual) {
+        if (Platform.OS === 'android') setMostrarPicker(false);
+        setModalInfo({
+          title: 'Hora inválida',
+          msg: `La hora de fin (${nuevaHoraStr} ${nuevoPeriodo.toUpperCase()}) debe ser posterior a la hora de inicio (${inputInicio} ${periodoInicio.toUpperCase()}).`,
+          type: 'error',
+          redirigir: false
+        });
+        setModalVisible(true);
+        return;
+      }
+    }
+
+    // Hora válida → aplicar
+    if (tipoPicker === 'inicio') {
+      aplicarCambioASeleccionados('inicio', nuevaHoraStr);
+      aplicarCambioASeleccionados('inicioPeriodo', nuevoPeriodo);
+    } else {
+      aplicarCambioASeleccionados('fin', nuevaHoraStr);
+      aplicarCambioASeleccionados('finPeriodo', nuevoPeriodo);
     }
 
     if (Platform.OS === 'android') setMostrarPicker(false);
@@ -252,62 +328,160 @@ export default function EditarPerfilScreen() {
 
   // --- GUARDAR ---
   const guardarCambios = async () => {
-    
-    // VALIDACIÓN 1: Verificar si se seleccionó al menos un día O si se cambió la foto
-    // Si no se hizo ninguna de las dos cosas, mostramos el modal de error.
-    if (diasSeleccionados.length === 0 && !nuevaFotoURI) {
-        setModalInfo({ 
-            title: 'Atención', 
-            msg: 'Debes seleccionar al menos un día (azul oscuro) para aplicar cambios en el horario, o cambiar tu foto de perfil.', 
-            type: 'error' 
-        });
-        setModalVisible(true);
-        return;
+
+    // Sin cambios → modal informativo azul
+    const hayDiasNuevos = diasNuevosAgregados.length > 0;
+    const hayEdicionHorario = diasSeleccionados.length > 0;
+    const hayFoto = !!nuevaFotoURI;
+
+    if (!hayDiasNuevos && !hayEdicionHorario && !hayFoto) {
+      setModalInfo({
+        title: 'Sin cambios',
+        msg: 'No realizaste ningún cambio. Selecciona un día para editar su horario, agrega un nuevo día laboral, o cambia tu foto de perfil.',
+        type: 'exito',   // azul informativo
+        redirigir: false
+      });
+      setModalVisible(true);
+      return;
     }
 
     setGuardando(true);
 
     try {
       const user = auth.currentUser;
-      if (!user) throw new Error("No usuario");
+      if (!user) throw new Error('No hay usuario autenticado.');
 
-      // 1. Subir foto
-      let finalFotoURL = fotoURL;
-      if (nuevaFotoURI) {
-        finalFotoURL = await subirImagenStorage(nuevaFotoURI);
-      }
-
-      // 2. Guardar en Firestore — separar datos entre 'usuarios' y 'amigos'
-      // Foto va en 'usuarios'
-      if (nuevaFotoURI) {
+      // 1. Subir y guardar foto si cambió
+      if (hayFoto) {
+        const finalFotoURL = await subirImagenStorage(nuevaFotoURI);
         const usuarioRef = doc(db, 'usuarios', user.uid);
-        await updateDoc(usuarioRef, {
-          fotografia: finalFotoURL,
-        });
-      }
-      
-      // Horarios van en 'amigos'
-      if (diasSeleccionados.length > 0) {
-        const amigoRef = doc(db, 'amigos', user.uid);
-        await updateDoc(amigoRef, {
-          horarios_trabajo: mapaHorarios
-        });
+        await updateDoc(usuarioRef, { fotografia: finalFotoURL });
       }
 
-      setModalInfo({ title: '¡Éxito!', msg: 'Perfil actualizado correctamente.', type: 'exito' });
+      // 2. Guardar horarios si se editaron días existentes O se agregaron nuevos
+      if (hayEdicionHorario || hayDiasNuevos) {
+        const amigoRef = doc(db, 'amigos', user.uid);
+        await updateDoc(amigoRef, { horarios_trabajo: mapaHorarios });
+      }
+
+      // Éxito → redirigir a perfil al cerrar el modal
+      setModalInfo({
+        title: '¡Cambios guardados!',
+        msg: 'Tu perfil fue actualizado correctamente.',
+        type: 'exito',
+        redirigir: true
+      });
       setModalVisible(true);
 
     } catch (error) {
-      setModalInfo({ title: 'Error', msg: 'No se pudieron guardar los cambios.', type: 'error' });
+      console.error('Error guardando cambios:', error);
+      setModalInfo({
+        title: 'Error',
+        msg: 'No se pudieron guardar los cambios. Verifica tu conexión e intenta de nuevo.',
+        type: 'error',
+        redirigir: false
+      });
       setModalVisible(true);
     } finally {
       setGuardando(false);
     }
   };
 
+  // Días disponibles para agregar (los que no están en diasRegistrados)
+  const ORDEN_DIAS_CONST: DiaKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+  const diasDisponiblesParaAgregar = ORDEN_DIAS_CONST.filter(d => !diasRegistrados.includes(d));
+
+  const abrirPickerAgregar = (tipo: 'inicio' | 'fin') => {
+    setTipoPickerAgregar(tipo);
+    const horaStr = tipo === 'inicio' ? inicioAgregar : finAgregar;
+    const periodo = tipo === 'inicio' ? inicioPeriodoAgregar : finPeriodoAgregar;
+    const [hStr, mStr] = horaStr.split(':');
+    let h = parseInt(hStr || '0', 10);
+    const m = parseInt(mStr || '0', 10);
+    if (periodo === 'pm' && h !== 12) h += 12;
+    if (periodo === 'am' && h === 12) h = 0;
+    const base = new Date();
+    base.setHours(h); base.setMinutes(m);
+    setHoraTempAgregar(base);
+    setMostrarPickerAgregar(true);
+  };
+
+  const onPickerAgregarChange = (event: any, selectedDate?: Date) => {
+    setMostrarPickerAgregar(Platform.OS === 'ios');
+    if (!selectedDate) return;
+    setHoraTempAgregar(selectedDate);
+    let h = selectedDate.getHours();
+    const m = selectedDate.getMinutes();
+    const nuevoPeriodo = h >= 12 ? 'pm' : 'am';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    const nuevaHoraStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+    // Validar coherencia inicio < fin también en el modal de agregar
+    if (tipoPickerAgregar === 'inicio') {
+      const minNuevo = horaAMinutosLocal(nuevaHoraStr, nuevoPeriodo);
+      const minFin   = horaAMinutosLocal(finAgregar, finPeriodoAgregar);
+      if (minNuevo >= minFin) {
+        if (Platform.OS === 'android') setMostrarPickerAgregar(false);
+        setModalInfo({
+          title: 'Hora inválida',
+          msg: `La hora de inicio (${nuevaHoraStr} ${nuevoPeriodo.toUpperCase()}) debe ser anterior a la hora de fin (${finAgregar} ${finPeriodoAgregar.toUpperCase()}).`,
+          type: 'error', redirigir: false
+        });
+        setModalAgregarVisible(false);
+        setModalVisible(true);
+        return;
+      }
+      setInicioAgregar(nuevaHoraStr);
+      setInicioPeriodoAgregar(nuevoPeriodo);
+    } else {
+      const minInicio = horaAMinutosLocal(inicioAgregar, inicioPeriodoAgregar);
+      const minNuevo  = horaAMinutosLocal(nuevaHoraStr, nuevoPeriodo);
+      if (minNuevo <= minInicio) {
+        if (Platform.OS === 'android') setMostrarPickerAgregar(false);
+        setModalInfo({
+          title: 'Hora inválida',
+          msg: `La hora de fin (${nuevaHoraStr} ${nuevoPeriodo.toUpperCase()}) debe ser posterior a la hora de inicio (${inicioAgregar} ${inicioPeriodoAgregar.toUpperCase()}).`,
+          type: 'error', redirigir: false
+        });
+        setModalAgregarVisible(false);
+        setModalVisible(true);
+        return;
+      }
+      setFinAgregar(nuevaHoraStr);
+      setFinPeriodoAgregar(nuevoPeriodo);
+    }
+
+    if (Platform.OS === 'android') setMostrarPickerAgregar(false);
+  };
+
+  const handleAbrirModalAgregar = () => {
+    setDiaAgregar(null);
+    setInicioAgregar('09:00');
+    setInicioPeriodoAgregar('am');
+    setFinAgregar('05:00');
+    setFinPeriodoAgregar('pm');
+    setModalAgregarVisible(true);
+  };
+
+  const handleConfirmarNuevoDia = () => {
+    if (!diaAgregar) return;
+    setMapaHorarios(prev => ({
+      ...prev,
+      [diaAgregar]: { inicio: inicioAgregar, inicioPeriodo: inicioPeriodoAgregar, fin: finAgregar, finPeriodo: finPeriodoAgregar, activo: true }
+    }));
+    setDiasRegistrados(prev =>
+      ORDEN_DIAS_CONST.filter(d => prev.includes(d) || d === diaAgregar)
+    );
+    setDiasNuevosAgregados(prev => [...prev, diaAgregar]);
+    setModalAgregarVisible(false);
+    setModalInfo({ title: '¡Día agregado!', msg: `El día fue añadido. Presiona "Guardar Cambios" para confirmarlo.`, type: 'exito', redirigir: false });
+    setModalVisible(true);
+  };
+
   const cerrarModalYSalir = () => {
     setModalVisible(false);
-    if (modalInfo.type === 'exito') {
+    if (modalInfo.redirigir) {
       router.push('/(alqui-amigo)/perfil');
     }
   };
@@ -436,6 +610,36 @@ export default function EditarPerfilScreen() {
 
         </View>
 
+        {/* AGREGAR NUEVO DÍA */}
+        <Text style={[styles.labelTitulo, { marginTop: 10 }]}>Agregar día laboral</Text>
+        <Text style={styles.subtituloDesc}>¿Quieres trabajar un día adicional? Agrégalo con su horario.</Text>
+
+        <View style={styles.cardAgregarDia}>
+          {diasDisponiblesParaAgregar.length === 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Feather name="check-circle" size={20} color="#008FD9" />
+              <Text style={{ color: '#008FD9', fontWeight: '600', fontSize: 14, flex: 1 }}>
+                Ya tienes todos los días de la semana registrados.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.labelInterno}>Días disponibles para agregar</Text>
+              <View style={styles.diasGrid}>
+                {diasDisponiblesParaAgregar.map(dia => (
+                  <View key={dia} style={styles.diaBtnDisponible}>
+                    <Text style={styles.diaTextDisponible}>{LABEL_DIAS[dia]}</Text>
+                  </View>
+                ))}
+              </View>
+              <TouchableOpacity style={styles.btnAgregarDia} onPress={handleAbrirModalAgregar}>
+                <Feather name="plus" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.txtBtnAgregarDia}>Agregar nuevo día</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
         {/* BOTONES */}
         <TouchableOpacity 
           style={[styles.btnGuardar, guardando && {backgroundColor: '#80BDFF'}]}
@@ -472,6 +676,95 @@ export default function EditarPerfilScreen() {
         tipo={modalInfo.type}
         onClose={cerrarModalYSalir}
       />
+
+      {/* PICKER para agregar nuevo día */}
+      {mostrarPickerAgregar && (
+        <DateTimePicker
+          value={horaTempAgregar}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          is24Hour={false}
+          onChange={onPickerAgregarChange}
+        />
+      )}
+
+      {/* MODAL AGREGAR NUEVO DÍA */}
+      <Modal visible={modalAgregarVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { width: '92%', paddingHorizontal: 20, alignItems: 'flex-start' }]}>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <Feather name="plus-circle" size={24} color="#008FD9" />
+              <Text style={styles.modalTitle}>Agregar día laboral</Text>
+            </View>
+
+            <Text style={[styles.labelInterno, { marginBottom: 10 }]}>Selecciona el día</Text>
+            <View style={styles.diasGrid}>
+              {diasDisponiblesParaAgregar.map(dia => {
+                const sel = diaAgregar === dia;
+                return (
+                  <TouchableOpacity
+                    key={dia}
+                    style={[styles.diaBtn, sel ? styles.diaBtnActivo : styles.diaBtnInactivo]}
+                    onPress={() => setDiaAgregar(dia)}
+                  >
+                    <Text style={[styles.diaText, sel ? styles.diaTextActivo : styles.diaTextInactivo]}>
+                      {LABEL_DIAS[dia]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {diaAgregar && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8F5FF', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginBottom: 12 }}>
+                <Feather name="calendar" size={14} color="#008FD9" />
+                <Text style={{ color: '#008FD9', fontWeight: '700', fontSize: 14 }}>
+                  {diaAgregar.charAt(0).toUpperCase() + diaAgregar.slice(1)}
+                </Text>
+              </View>
+            )}
+
+            <Text style={[styles.labelInterno, { marginTop: 8 }]}>Rango de horario</Text>
+            <View style={[styles.rowHorarios, { width: '100%' }]}>
+              <View style={styles.bloqueHora}>
+                <Text style={styles.labelHora}>Hora inicio</Text>
+                <TouchableOpacity style={styles.inputContainer} onPress={() => abrirPickerAgregar('inicio')}>
+                  <Text style={styles.inputHora}>{inicioAgregar}</Text>
+                  <View style={styles.cajaAmPm}><Text style={styles.txtAmPm}>{inicioPeriodoAgregar.toUpperCase()}</Text></View>
+                  <Feather name="clock" size={18} color="#000" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.bloqueHora}>
+                <Text style={styles.labelHora}>Hora fin</Text>
+                <TouchableOpacity style={styles.inputContainer} onPress={() => abrirPickerAgregar('fin')}>
+                  <Text style={styles.inputHora}>{finAgregar}</Text>
+                  <View style={styles.cajaAmPm}><Text style={styles.txtAmPm}>{finPeriodoAgregar.toUpperCase()}</Text></View>
+                  <Feather name="clock" size={18} color="#000" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1.5, borderColor: '#CCC', backgroundColor: '#FFF' }}
+                onPress={() => setModalAgregarVisible(false)}
+              >
+                <Text style={{ color: '#555', fontWeight: '600', fontSize: 15 }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#008FD9', opacity: diaAgregar ? 1 : 0.4 }}
+                onPress={handleConfirmarNuevoDia}
+                disabled={!diaAgregar}
+              >
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Agregar</Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -486,8 +779,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#000' },
   scrollContent: { padding: 20, paddingBottom: 50 },
 
-  labelTitulo: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#000' },
-  subtituloDesc: { fontSize: 14, color: '#666', marginBottom: 15 },
+  // Removed duplicate property
+  // Removed duplicate property
 
   // FOTO
   cardFoto: { backgroundColor: '#F0F0F0', borderRadius: 15, padding: 20, marginBottom: 25 },
@@ -542,5 +835,17 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
   modalText: { textAlign: 'center', color: '#666', marginBottom: 20 },
   modalBtn: { width: '100%', padding: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnText: { color: '#FFF', fontWeight: 'bold' }
+  modalBtnText: { color: '#FFF', fontWeight: 'bold' },
+
+  // AGREGAR DÍA
+  labelTitulo: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#000' },
+  subtituloDesc: { fontSize: 14, color: '#666', marginBottom: 15 },
+  cardAgregarDia: {
+    backgroundColor: '#F0F0F0', borderRadius: 15, padding: 20, marginBottom: 30,
+    borderWidth: 1.5, borderColor: '#D0ECFF', borderStyle: 'dashed'
+  },
+  diaBtnDisponible: { width: 45, height: 35, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E0E0E0' },
+  diaTextDisponible: { fontWeight: 'bold', fontSize: 13, color: '#888' },
+  btnAgregarDia: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#008FD9', borderRadius: 10, paddingVertical: 13, marginTop: 5 },
+  txtBtnAgregarDia: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
 });
